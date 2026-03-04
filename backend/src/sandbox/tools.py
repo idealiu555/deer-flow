@@ -99,8 +99,7 @@ def get_thread_data(runtime: ToolRuntime[ContextT, ThreadState] | None) -> Threa
 def is_local_sandbox(runtime: ToolRuntime[ContextT, ThreadState] | None) -> bool:
     """Check if the current sandbox is a local sandbox.
 
-    Path replacement is only needed for local sandbox since aio sandbox
-    already has /mnt/user-data mounted in the container.
+    Path replacement is only needed for local sandbox.
     """
     if runtime is None:
         return False
@@ -197,7 +196,6 @@ def ensure_thread_directories_exist(runtime: ToolRuntime[ContextT, ThreadState] 
 
     This function is called lazily when any sandbox tool is first used.
     For local sandbox, it creates the directories on the filesystem.
-    For other sandboxes (like aio), directories are already mounted in the container.
 
     Args:
         runtime: Tool runtime containing state and context.

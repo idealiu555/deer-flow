@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from src.config.agents_config import load_agent_soul
+from src.config.paths import get_paths
 from src.skills import load_skills
 
 
@@ -149,7 +149,7 @@ bash("npm test")  # Direct execution, not task()
 
 SYSTEM_PROMPT_TEMPLATE = """
 <role>
-You are {agent_name}, an open-source super agent.
+You are DeerFlow 2.0, an open-source super agent.
 </role>
 
 {soul}
@@ -282,11 +282,8 @@ Recent breakthroughs in language models have also accelerated progress
 """
 
 
-def _get_memory_context(agent_name: str | None = None) -> str:
+def _get_memory_context() -> str:
     """Get memory context for injection into system prompt.
-
-    Args:
-        agent_name: If provided, loads per-agent memory. If None, loads global memory.
 
     Returns:
         Formatted memory context string wrapped in XML tags, or empty string if disabled.
@@ -299,7 +296,7 @@ def _get_memory_context(agent_name: str | None = None) -> str:
         if not config.enabled or not config.injection_enabled:
             return ""
 
-        memory_data = get_memory_data(agent_name)
+        memory_data = get_memory_data()
         memory_content = format_memory_for_injection(memory_data, max_tokens=config.max_injection_tokens)
 
         if not memory_content.strip():
@@ -358,17 +355,25 @@ You have access to skills that provide optimized workflows for specific tasks. E
 </skill_system>"""
 
 
-def get_agent_soul(agent_name: str | None) -> str:
-    # Append SOUL.md (agent personality) if present
-    soul = load_agent_soul(agent_name)
+def get_agent_soul() -> str:
+    # Append global SOUL.md (agent personality) if present
+    soul_path = get_paths().base_dir / "SOUL.md"
+    if not soul_path.exists():
+        return ""
+    soul = soul_path.read_text(encoding="utf-8").strip()
     if soul:
-        return f"<soul>\n{soul}\n</soul>\n" if soul else ""
+        return f"<soul>\n{soul}\n</soul>\n"
     return ""
 
 
-def apply_prompt_template(subagent_enabled: bool = False, max_concurrent_subagents: int = 3, *, agent_name: str | None = None, available_skills: set[str] | None = None) -> str:
+def apply_prompt_template(
+    subagent_enabled: bool = False,
+    max_concurrent_subagents: int = 3,
+    *,
+    available_skills: set[str] | None = None,
+) -> str:
     # Get memory context
-    memory_context = _get_memory_context(agent_name)
+    memory_context = _get_memory_context()
 
     # Include subagent section only if enabled (from runtime parameter)
     n = max_concurrent_subagents
@@ -397,8 +402,7 @@ def apply_prompt_template(subagent_enabled: bool = False, max_concurrent_subagen
 
     # Format the prompt with dynamic skills and memory
     prompt = SYSTEM_PROMPT_TEMPLATE.format(
-        agent_name=agent_name or "DeerFlow 2.0",
-        soul=get_agent_soul(agent_name),
+        soul=get_agent_soul(),
         skills_section=skills_section,
         memory_context=memory_context,
         subagent_section=subagent_section,

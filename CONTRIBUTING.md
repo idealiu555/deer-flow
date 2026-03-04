@@ -27,28 +27,17 @@ Docker provides a consistent, isolated environment with all dependencies pre-con
    # or edit config.yaml directly
    ```
 
-2. **Initialize Docker environment** (first time only):
-   ```bash
-   make docker-init
-   ```
-   This will:
-   - Build Docker images
-   - Install frontend dependencies (pnpm)
-   - Install backend dependencies (uv)
-   - Share pnpm cache with host for faster builds
-
-3. **Start development services**:
+2. **Start development services**:
    ```bash
    make docker-start
    ```
-   `make docker-start` reads `config.yaml` and starts `provisioner` only for provisioner/Kubernetes sandbox mode.
 
    All services will start with hot-reload enabled:
    - Frontend changes are automatically reloaded
    - Backend changes trigger automatic restart
    - LangGraph server supports hot-reload
 
-4. **Access the application**:
+3. **Access the application**:
    - Web Interface: http://localhost:2026
    - API Gateway: http://localhost:2026/api/*
    - LangGraph: http://localhost:2026/api/langgraph/*
@@ -56,8 +45,6 @@ Docker provides a consistent, isolated environment with all dependencies pre-con
 #### Docker Commands
 
 ```bash
-# Build the custom k3s image (with pre-cached sandbox image)
-make docker-init
 # Start Docker services (mode-aware, localhost:2026)
 make docker-start
 # Stop Docker development services
@@ -79,8 +66,7 @@ Docker Compose (deer-flow-dev)
   ├→ nginx (port 2026) ← Reverse proxy
   ├→ web (port 3000) ← Frontend with hot-reload
   ├→ api (port 8001) ← Gateway API with hot-reload
-   ├→ langgraph (port 2024) ← LangGraph server with hot-reload
-   └→ provisioner (optional, port 8002) ← Started only in provisioner/K8s sandbox mode
+   └→ langgraph (port 2024) ← LangGraph server with hot-reload
 ```
 
 **Benefits of Docker Development**:
@@ -243,10 +229,7 @@ pnpm test
 
 ### PR Regression Checks
 
-Every pull request runs the backend regression workflow at [.github/workflows/backend-unit-tests.yml](.github/workflows/backend-unit-tests.yml), including:
-
-- `tests/test_provisioner_kubeconfig.py`
-- `tests/test_docker_sandbox_mode_detection.py`
+Every pull request runs backend regression tests via [.github/workflows/backend-unit-tests.yml](.github/workflows/backend-unit-tests.yml).
 
 ## Code Style
 

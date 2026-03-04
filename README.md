@@ -118,11 +118,8 @@ The fastest way to get started with a consistent environment:
 
 1. **Initialize and start**:
    ```bash
-   make docker-init    # Pull sandbox image (Only once or when image updates)
-   make docker-start   # Start services (auto-detects sandbox mode from config.yaml)
+   make docker-start   # Start services
    ```
-
-   `make docker-start` now starts `provisioner` only when `config.yaml` uses provisioner mode (`sandbox.use: src.community.aio_sandbox:AioSandboxProvider` with `provisioner_url`).
 
 2. **Access**: http://localhost:2026
 
@@ -137,28 +134,18 @@ If you prefer running services locally:
    make check  # Verifies Node.js 22+, pnpm, uv, nginx
    ```
 
-2. **(Optional) Pre-pull sandbox image**:
-   ```bash
-   # Recommended if using Docker/Container-based sandbox
-   make setup-sandbox
-   ```
-
-3. **Start services**:
+2. **Start services**:
    ```bash
    make dev
    ```
 
-4. **Access**: http://localhost:2026
+3. **Access**: http://localhost:2026
 
 ### Advanced
 #### Sandbox Mode
 
-DeerFlow supports multiple sandbox execution modes:
+DeerFlow uses local sandbox execution:
 - **Local Execution** (runs sandbox code directly on the host machine)
-- **Docker Execution** (runs sandbox code in isolated Docker containers)
-- **Docker Execution with Kubernetes** (runs sandbox code in Kubernetes pods via provisioner service)
-
-For Docker development, service startup follows `config.yaml` sandbox mode. In Local/Docker modes, `provisioner` is not started.
 
 See the [Sandbox Configuration Guide](backend/docs/CONFIGURATION.md#sandbox) to configure your preferred mode.
 
@@ -217,7 +204,7 @@ This is how DeerFlow handles tasks that take minutes to hours: a research task m
 
 DeerFlow doesn't just *talk* about doing things. It has its own computer.
 
-Each task runs inside an isolated Docker container with a full filesystem — skills, workspace, uploads, outputs. The agent reads, writes, and edits files. It executes bash commands and codes. It views images. All sandboxed, all auditable, zero contamination between sessions.
+Each task runs in an isolated per-thread sandbox workspace with a full filesystem — skills, workspace, uploads, outputs. The agent reads, writes, and edits files. It executes bash commands and code. It views images. All actions are auditable.
 
 This is the difference between a chatbot with tool access and an agent with an actual execution environment.
 
@@ -287,7 +274,7 @@ All dict-returning methods are validated against Gateway Pydantic response model
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, workflow, and guidelines.
 
-Regression coverage includes Docker sandbox mode detection and provisioner kubeconfig-path handling tests in `backend/tests/`.
+Regression coverage is maintained in `backend/tests/` for core gateway, agent, memory, and tool behaviors.
 
 ## License
 

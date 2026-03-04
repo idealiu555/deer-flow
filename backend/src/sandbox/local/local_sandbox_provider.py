@@ -55,6 +55,4 @@ class LocalSandboxProvider(SandboxProvider):
         # LocalSandbox uses singleton pattern - no cleanup needed.
         # Note: This method is intentionally not called by SandboxMiddleware
         # to allow sandbox reuse across multiple turns in a thread.
-        # For Docker-based providers (e.g., AioSandboxProvider), cleanup
-        # happens at application shutdown via the shutdown() method.
         pass

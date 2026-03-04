@@ -74,7 +74,7 @@ Middlewares execute in strict order, each handling a specific concern:
 Per-thread isolated execution with virtual path translation:
 
 - **Abstract interface**: `execute_command`, `read_file`, `write_file`, `list_dir`
-- **Providers**: `LocalSandboxProvider` (filesystem) and `AioSandboxProvider` (Docker, in community/)
+- **Provider**: `LocalSandboxProvider` (filesystem)
 - **Virtual paths**: `/mnt/user-data/{workspace,uploads,outputs}` → thread-specific physical directories
 - **Skills path**: `/mnt/skills` → `deer-flow/skills/` directory
 - **Skills loading**: Recursively discovers nested `SKILL.md` files under `skills/{public,custom}` and preserves nested container paths
@@ -332,7 +332,6 @@ uv run pytest
 - **LangChain** (1.2.3+) - LLM abstractions and tool system
 - **FastAPI** (0.115.0+) - Gateway REST API
 - **langchain-mcp-adapters** - Model Context Protocol support
-- **agent-sandbox** - Sandboxed code execution
 - **markitdown** - Multi-format document conversion
 - **tavily-python** / **firecrawl-py** - Web search and scraping
 
