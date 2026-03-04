@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { type PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import { ArtifactTrigger } from "@/components/workspace/artifacts";
@@ -24,6 +24,20 @@ import { env } from "@/env";
 import { cn } from "@/lib/utils";
 
 export default function ChatPage() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
+
+  return <ChatPageContent />;
+}
+
+function ChatPageContent() {
   const { t } = useI18n();
   const [settings, setSettings] = useLocalSettings();
 

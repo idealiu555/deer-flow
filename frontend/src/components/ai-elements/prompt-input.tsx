@@ -1140,7 +1140,7 @@ export const PromptInputSpeechButton = ({
 
       speechRecognition.continuous = true;
       speechRecognition.interimResults = true;
-      speechRecognition.lang = "en-US";
+      speechRecognition.lang = "zh-CN";
 
       speechRecognition.onstart = () => {
         setIsListening(true);

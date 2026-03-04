@@ -48,3 +48,4 @@ sandbox_image_cache.tar
 
 # ignore the legacy `web` folder
 web/
+AGENTS.md
