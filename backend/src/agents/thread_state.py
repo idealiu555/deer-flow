@@ -18,6 +18,10 @@ class ViewedImageData(TypedDict):
     mime_type: str
 
 
+class AgentContext(TypedDict):
+    thread_id: NotRequired[str]
+
+
 def merge_artifacts(existing: list[str] | None, new: list[str] | None) -> list[str]:
     """Reducer for artifacts list - merges and deduplicates artifacts."""
     if existing is None:

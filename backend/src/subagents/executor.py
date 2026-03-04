@@ -15,7 +15,7 @@ from langchain.tools import BaseTool
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 
-from src.agents.thread_state import SandboxState, ThreadDataState, ThreadState
+from src.agents.thread_state import AgentContext, SandboxState, ThreadDataState, ThreadState
 from src.models import create_chat_model
 from src.subagents.config import SubagentConfig
 
@@ -181,6 +181,7 @@ class SubagentExecutor:
             middleware=middlewares,
             system_prompt=self.config.system_prompt,
             state_schema=ThreadState,
+            context_schema=AgentContext,
         )
 
     def _build_initial_state(self, task: str) -> dict[str, Any]:

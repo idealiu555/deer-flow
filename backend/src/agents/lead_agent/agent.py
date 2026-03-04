@@ -13,7 +13,7 @@ from src.agents.middlewares.thread_data_middleware import ThreadDataMiddleware
 from src.agents.middlewares.title_middleware import TitleMiddleware
 from src.agents.middlewares.uploads_middleware import UploadsMiddleware
 from src.agents.middlewares.view_image_middleware import ViewImageMiddleware
-from src.agents.thread_state import ThreadState
+from src.agents.thread_state import AgentContext, ThreadState
 from src.config.app_config import get_app_config
 from src.config.summarization_config import get_summarization_config
 from src.models import create_chat_model
@@ -300,4 +300,5 @@ def make_lead_agent(config: RunnableConfig):
         middleware=_build_middlewares(config, model_name=model_name),
         system_prompt=apply_prompt_template(subagent_enabled=subagent_enabled, max_concurrent_subagents=max_concurrent_subagents),
         state_schema=ThreadState,
+        context_schema=AgentContext,
     )

@@ -35,7 +35,7 @@ from langchain_core.runnables import RunnableConfig
 
 from src.agents.lead_agent.agent import _build_middlewares
 from src.agents.lead_agent.prompt import apply_prompt_template
-from src.agents.thread_state import ThreadState
+from src.agents.thread_state import AgentContext, ThreadState
 from src.config.app_config import get_app_config, reload_app_config
 from src.config.extensions_config import ExtensionsConfig, SkillStateConfig, get_extensions_config, reload_extensions_config
 from src.config.paths import get_paths
@@ -204,6 +204,7 @@ class DeerFlowClient:
                 max_concurrent_subagents=max_concurrent_subagents,
             ),
             "state_schema": ThreadState,
+            "context_schema": AgentContext,
         }
         if self._checkpointer is not None:
             kwargs["checkpointer"] = self._checkpointer

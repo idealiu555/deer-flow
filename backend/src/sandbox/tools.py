@@ -1,9 +1,8 @@
 import re
 
 from langchain.tools import ToolRuntime, tool
-from langgraph.typing import ContextT
 
-from src.agents.thread_state import ThreadDataState, ThreadState
+from src.agents.thread_state import AgentContext, ThreadDataState, ThreadState
 from src.config.paths import VIRTUAL_PATH_PREFIX
 from src.sandbox.exceptions import (
     SandboxError,
@@ -87,7 +86,7 @@ def replace_virtual_paths_in_command(command: str, thread_data: ThreadDataState 
     return pattern.sub(replace_match, command)
 
 
-def get_thread_data(runtime: ToolRuntime[ContextT, ThreadState] | None) -> ThreadDataState | None:
+def get_thread_data(runtime: ToolRuntime[AgentContext, ThreadState] | None) -> ThreadDataState | None:
     """Extract thread_data from runtime state."""
     if runtime is None:
         return None
@@ -96,7 +95,7 @@ def get_thread_data(runtime: ToolRuntime[ContextT, ThreadState] | None) -> Threa
     return runtime.state.get("thread_data")
 
 
-def is_local_sandbox(runtime: ToolRuntime[ContextT, ThreadState] | None) -> bool:
+def is_local_sandbox(runtime: ToolRuntime[AgentContext, ThreadState] | None) -> bool:
     """Check if the current sandbox is a local sandbox.
 
     Path replacement is only needed for local sandbox.
@@ -111,7 +110,7 @@ def is_local_sandbox(runtime: ToolRuntime[ContextT, ThreadState] | None) -> bool
     return sandbox_state.get("sandbox_id") == "local"
 
 
-def sandbox_from_runtime(runtime: ToolRuntime[ContextT, ThreadState] | None = None) -> Sandbox:
+def sandbox_from_runtime(runtime: ToolRuntime[AgentContext, ThreadState] | None = None) -> Sandbox:
     """Extract sandbox instance from tool runtime.
 
     DEPRECATED: Use ensure_sandbox_initialized() for lazy initialization support.
@@ -137,7 +136,7 @@ def sandbox_from_runtime(runtime: ToolRuntime[ContextT, ThreadState] | None = No
     return sandbox
 
 
-def ensure_sandbox_initialized(runtime: ToolRuntime[ContextT, ThreadState] | None = None) -> Sandbox:
+def ensure_sandbox_initialized(runtime: ToolRuntime[AgentContext, ThreadState] | None = None) -> Sandbox:
     """Ensure sandbox is initialized, acquiring lazily if needed.
 
     On first call, acquires a sandbox from the provider and stores it in runtime state.
@@ -191,7 +190,7 @@ def ensure_sandbox_initialized(runtime: ToolRuntime[ContextT, ThreadState] | Non
     return sandbox
 
 
-def ensure_thread_directories_exist(runtime: ToolRuntime[ContextT, ThreadState] | None) -> None:
+def ensure_thread_directories_exist(runtime: ToolRuntime[AgentContext, ThreadState] | None) -> None:
     """Ensure thread data directories (workspace, uploads, outputs) exist.
 
     This function is called lazily when any sandbox tool is first used.
@@ -228,7 +227,7 @@ def ensure_thread_directories_exist(runtime: ToolRuntime[ContextT, ThreadState] 
 
 
 @tool("bash", parse_docstring=True)
-def bash_tool(runtime: ToolRuntime[ContextT, ThreadState], description: str, command: str) -> str:
+def bash_tool(runtime: ToolRuntime[AgentContext, ThreadState], description: str, command: str) -> str:
     """Execute a bash command in a Linux environment.
 
 
@@ -253,7 +252,7 @@ def bash_tool(runtime: ToolRuntime[ContextT, ThreadState], description: str, com
 
 
 @tool("ls", parse_docstring=True)
-def ls_tool(runtime: ToolRuntime[ContextT, ThreadState], description: str, path: str) -> str:
+def ls_tool(runtime: ToolRuntime[AgentContext, ThreadState], description: str, path: str) -> str:
     """List the contents of a directory up to 2 levels deep in tree format.
 
     Args:
@@ -282,7 +281,7 @@ def ls_tool(runtime: ToolRuntime[ContextT, ThreadState], description: str, path:
 
 @tool("read_file", parse_docstring=True)
 def read_file_tool(
-    runtime: ToolRuntime[ContextT, ThreadState],
+    runtime: ToolRuntime[AgentContext, ThreadState],
     description: str,
     path: str,
     start_line: int | None = None,
@@ -322,7 +321,7 @@ def read_file_tool(
 
 @tool("write_file", parse_docstring=True)
 def write_file_tool(
-    runtime: ToolRuntime[ContextT, ThreadState],
+    runtime: ToolRuntime[AgentContext, ThreadState],
     description: str,
     path: str,
     content: str,
@@ -357,7 +356,7 @@ def write_file_tool(
 
 @tool("str_replace", parse_docstring=True)
 def str_replace_tool(
-    runtime: ToolRuntime[ContextT, ThreadState],
+    runtime: ToolRuntime[AgentContext, ThreadState],
     description: str,
     path: str,
     old_str: str,

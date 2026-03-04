@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +13,13 @@ from src.agents.memory.prompt import (
 from src.config.memory_config import get_memory_config
 from src.config.paths import get_paths
 from src.models import create_chat_model
+
+SHANGHAI_TZ = timezone(timedelta(hours=8))
+
+
+def _now_iso() -> str:
+    """Return timezone-aware ISO timestamp in Asia/Shanghai."""
+    return datetime.now(SHANGHAI_TZ).isoformat()
 
 
 def _get_memory_file_path() -> Path:
@@ -33,7 +40,7 @@ def _create_empty_memory() -> dict[str, Any]:
     """Create an empty memory structure."""
     return {
         "version": "1.0",
-        "lastUpdated": datetime.utcnow().isoformat() + "Z",
+        "lastUpdated": _now_iso(),
         "user": {
             "workContext": {"summary": "", "updatedAt": ""},
             "personalContext": {"summary": "", "updatedAt": ""},
@@ -133,7 +140,7 @@ def _save_memory_to_file(memory_data: dict[str, Any]) -> bool:
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Update lastUpdated timestamp
-        memory_data["lastUpdated"] = datetime.utcnow().isoformat() + "Z"
+        memory_data["lastUpdated"] = _now_iso()
 
         # Write atomically using temp file
         temp_path = file_path.with_suffix(".tmp")
@@ -250,7 +257,7 @@ class MemoryUpdater:
             Updated memory data.
         """
         config = get_memory_config()
-        now = datetime.utcnow().isoformat() + "Z"
+        now = _now_iso()
 
         # Update user sections
         user_updates = update_data.get("user", {})
