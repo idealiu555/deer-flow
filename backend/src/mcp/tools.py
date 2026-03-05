@@ -3,12 +3,51 @@
 import logging
 
 from langchain_core.tools import BaseTool
+from langchain_core.tools.base import ToolException
 
 from src.config.extensions_config import ExtensionsConfig
 from src.mcp.client import build_servers_config
 from src.mcp.oauth import build_oauth_tool_interceptor, get_initial_oauth_headers
 
 logger = logging.getLogger(__name__)
+
+
+def _build_mcp_tool_error_message(tool_name: str) -> str:
+    """Build a readable fallback message when an MCP tool call fails."""
+    return (
+        f"MCP tool '{tool_name}' failed (upstream provider/API error). "
+        "Will continue this run with other available tools. "
+        "You can retry later, or configure provider API keys/network settings in `.env` for better stability."
+    )
+
+
+def _build_mcp_tool_error_handler(tool_name: str):
+    """Create a per-tool error handler for MCP tools."""
+
+    def _handle_tool_error(error: ToolException) -> str:
+        logger.warning("Downgrading MCP tool error from tool '%s': %s", tool_name, error)
+        return _build_mcp_tool_error_message(tool_name)
+
+    return _handle_tool_error
+
+
+def _attach_mcp_tool_error_downgrade(tools: list[BaseTool]) -> list[BaseTool]:
+    """Attach soft-fail handlers so MCP tool errors don't fail the whole run.
+
+    This applies at MCP-tool load time and therefore works for:
+    - lead agent
+    - subagents
+    - any future call path that uses cached MCP tools
+    """
+    for tool in tools:
+        # StructuredTool has this field; guard for safety with non-standard tools.
+        if not hasattr(tool, "handle_tool_error"):
+            continue
+        try:
+            setattr(tool, "handle_tool_error", _build_mcp_tool_error_handler(getattr(tool, "name", "unknown")))
+        except Exception as e:
+            logger.warning("Failed to attach MCP error downgrade handler for tool '%s': %s", getattr(tool, "name", "unknown"), e)
+    return tools
 
 
 async def get_mcp_tools() -> list[BaseTool]:
@@ -57,6 +96,7 @@ async def get_mcp_tools() -> list[BaseTool]:
 
         # Get all tools from all servers
         tools = await client.get_tools()
+        tools = _attach_mcp_tool_error_downgrade(tools)
         logger.info(f"Successfully loaded {len(tools)} tool(s) from MCP servers")
 
         return tools

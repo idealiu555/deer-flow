@@ -1,5 +1,6 @@
 """Subagent execution engine."""
 
+import asyncio
 import logging
 import threading
 import uuid
@@ -205,6 +206,46 @@ class SubagentExecutor:
 
         return state
 
+    async def _execute_stream_async(
+        self,
+        agent: Any,
+        state: dict[str, Any],
+        run_config: RunnableConfig,
+        context: dict[str, Any],
+        result: SubagentResult,
+    ) -> dict[str, Any] | None:
+        """Run the subagent stream asynchronously and capture incremental AI messages."""
+        final_state = None
+        async for chunk in agent.astream(state, config=run_config, context=context, stream_mode="values"):  # type: ignore[arg-type]
+            final_state = chunk
+
+            # Extract AI messages from the current state
+            messages = chunk.get("messages", [])
+            if not messages:
+                continue
+
+            last_message = messages[-1]
+            # Check if this is a new AI message
+            if not isinstance(last_message, AIMessage):
+                continue
+
+            # Convert message to dict for serialization
+            message_dict = last_message.model_dump()
+
+            # Only add if it's not already in the list (avoid duplicates)
+            # Check by comparing message IDs if available, otherwise compare full dict
+            message_id = message_dict.get("id")
+            if message_id:
+                is_duplicate = any(msg.get("id") == message_id for msg in result.ai_messages)
+            else:
+                is_duplicate = message_dict in result.ai_messages
+
+            if not is_duplicate:
+                result.ai_messages.append(message_dict)
+                logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} captured AI message #{len(result.ai_messages)}")
+
+        return final_state
+
     def execute(self, task: str, result_holder: SubagentResult | None = None) -> SubagentResult:
         """Execute a task synchronously.
 
@@ -243,32 +284,9 @@ class SubagentExecutor:
 
             logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} starting execution with max_turns={self.config.max_turns}")
 
-            # Use stream instead of invoke to get real-time updates
-            # This allows us to collect AI messages as they are generated
-            final_state = None
-            for chunk in agent.stream(state, config=run_config, context=context, stream_mode="values"):  # type: ignore[arg-type]
-                final_state = chunk
-
-                # Extract AI messages from the current state
-                messages = chunk.get("messages", [])
-                if messages:
-                    last_message = messages[-1]
-                    # Check if this is a new AI message
-                    if isinstance(last_message, AIMessage):
-                        # Convert message to dict for serialization
-                        message_dict = last_message.model_dump()
-                        # Only add if it's not already in the list (avoid duplicates)
-                        # Check by comparing message IDs if available, otherwise compare full dict
-                        message_id = message_dict.get("id")
-                        is_duplicate = False
-                        if message_id:
-                            is_duplicate = any(msg.get("id") == message_id for msg in result.ai_messages)
-                        else:
-                            is_duplicate = message_dict in result.ai_messages
-
-                        if not is_duplicate:
-                            result.ai_messages.append(message_dict)
-                            logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} captured AI message #{len(result.ai_messages)}")
+            # Use async stream to support async-only tools (e.g. StructuredTool with coroutine only).
+            # Keep a sync API by driving the coroutine from this worker thread.
+            final_state = asyncio.run(self._execute_stream_async(agent, state, run_config, context, result))
 
             logger.info(f"[trace={self.trace_id}] Subagent {self.config.name} completed execution")
 
