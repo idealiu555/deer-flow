@@ -118,3 +118,33 @@ def test_upload_files_rejects_dotdot_and_dot_filenames(
 
     uploads_dir = isolated_deer_flow_home / "threads" / "thread-safe" / "user-data" / "uploads"
     assert sorted([entry.name for entry in uploads_dir.iterdir()]) == ["passwd"]
+
+
+# ---------------------------------------------------------------------------
+# Bug 3: list/delete must not create the uploads directory as a side effect
+# ---------------------------------------------------------------------------
+
+
+def test_list_uploaded_files_does_not_create_directory(
+    client: TestClient, isolated_deer_flow_home: Path
+):
+    uploads_dir = isolated_deer_flow_home / "threads" / "thread-list" / "user-data" / "uploads"
+    assert not uploads_dir.exists(), "Directory must not exist before the request"
+
+    response = client.get("/api/threads/thread-list/uploads/list")
+
+    assert response.status_code == 200
+    assert response.json() == {"files": [], "count": 0}
+    assert not uploads_dir.exists(), "List endpoint must not create the uploads directory"
+
+
+def test_delete_missing_file_does_not_create_directory(
+    client: TestClient, isolated_deer_flow_home: Path
+):
+    uploads_dir = isolated_deer_flow_home / "threads" / "thread-del" / "user-data" / "uploads"
+    assert not uploads_dir.exists(), "Directory must not exist before the request"
+
+    response = client.delete("/api/threads/thread-del/uploads/nonexistent.txt")
+
+    assert response.status_code == 404
+    assert not uploads_dir.exists(), "Delete endpoint must not create the uploads directory for a missing file"

@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-import os
+import threading
 
 from langchain_core.tools import BaseTool
 
@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 
 _mcp_tools_cache: list[BaseTool] | None = None
 _cache_initialized = False
-_initialization_lock = asyncio.Lock()
+_initialization_lock = threading.Lock()  # threading.Lock for cross-thread safety
+_init_claimed = False  # True once a caller has claimed the initialization slot
 _config_mtime: float | None = None  # Track config file modification time
 
 
@@ -22,9 +23,15 @@ def _get_config_mtime() -> float | None:
     """
     from src.config.extensions_config import ExtensionsConfig
 
-    config_path = ExtensionsConfig.resolve_config_path()
-    if config_path and config_path.exists():
-        return os.path.getmtime(config_path)
+    try:
+        config_path = ExtensionsConfig.resolve_config_path()
+    except FileNotFoundError:
+        return None
+    if config_path:
+        try:
+            return config_path.stat().st_mtime
+        except FileNotFoundError:
+            return None
     return None
 
 
@@ -40,6 +47,11 @@ def _is_cache_stale() -> bool:
         return False  # Not initialized yet, not stale
 
     current_mtime = _get_config_mtime()
+
+    # If config file existed before but is now gone, treat as stale
+    if _config_mtime is not None and current_mtime is None:
+        logger.info("MCP config file has been removed since last initialization, cache is stale")
+        return True
 
     # If we couldn't get mtime before or now, assume not stale
     if _config_mtime is None or current_mtime is None:
@@ -61,22 +73,37 @@ async def initialize_mcp_tools() -> list[BaseTool]:
     Returns:
         List of LangChain tools from all enabled MCP servers.
     """
-    global _mcp_tools_cache, _cache_initialized, _config_mtime
+    global _mcp_tools_cache, _cache_initialized, _config_mtime, _init_claimed
 
-    async with _initialization_lock:
-        if _cache_initialized:
-            logger.info("MCP tools already initialized")
-            return _mcp_tools_cache or []
+    # Atomically try to claim the initialization slot.
+    # The lock is only held for this brief synchronous check-and-set,
+    # never across an await point.
+    while True:
+        with _initialization_lock:
+            if _cache_initialized:
+                logger.info("MCP tools already initialized")
+                return _mcp_tools_cache or []
+            if not _init_claimed:
+                _init_claimed = True
+                break
+        # Another coroutine/thread is initializing. Yield and retry.
+        await asyncio.sleep(0.05)
 
+    # We are the sole initializer.
+    try:
         from src.mcp.tools import get_mcp_tools
 
         logger.info("Initializing MCP tools...")
         _mcp_tools_cache = await get_mcp_tools()
-        _cache_initialized = True
-        _config_mtime = _get_config_mtime()  # Record config file mtime
+        with _initialization_lock:
+            _cache_initialized = True
+            _config_mtime = _get_config_mtime()  # Record config file mtime
         logger.info(f"MCP tools initialized: {len(_mcp_tools_cache)} tool(s) loaded (config mtime: {_config_mtime})")
-
         return _mcp_tools_cache
+    finally:
+        # Always release the claim so future calls can proceed (success or failure).
+        with _initialization_lock:
+            _init_claimed = False
 
 
 def get_cached_mcp_tools() -> list[BaseTool]:
@@ -131,8 +158,9 @@ def reset_mcp_tools_cache() -> None:
 
     This is useful for testing or when you want to reload MCP tools.
     """
-    global _mcp_tools_cache, _cache_initialized, _config_mtime
+    global _mcp_tools_cache, _cache_initialized, _config_mtime, _init_claimed
     _mcp_tools_cache = None
     _cache_initialized = False
     _config_mtime = None
+    _init_claimed = False
     logger.info("MCP tools cache reset")

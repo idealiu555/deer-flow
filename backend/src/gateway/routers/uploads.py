@@ -33,17 +33,19 @@ class UploadResponse(BaseModel):
     message: str
 
 
-def get_uploads_dir(thread_id: str) -> Path:
+def get_uploads_dir(thread_id: str, create: bool = True) -> Path:
     """Get the uploads directory for a thread.
 
     Args:
         thread_id: The thread ID.
+        create: Whether to create the directory if it does not exist.
 
     Returns:
         Path to the uploads directory.
     """
     base_dir = get_paths().sandbox_uploads_dir(thread_id)
-    base_dir.mkdir(parents=True, exist_ok=True)
+    if create:
+        base_dir.mkdir(parents=True, exist_ok=True)
     return base_dir
 
 
@@ -174,7 +176,7 @@ async def list_uploaded_files(thread_id: str) -> dict:
     Returns:
         Dictionary containing list of files with their metadata.
     """
-    uploads_dir = get_uploads_dir(thread_id)
+    uploads_dir = get_uploads_dir(thread_id, create=False)
 
     if not uploads_dir.exists():
         return {"files": [], "count": 0}
@@ -183,7 +185,7 @@ async def list_uploaded_files(thread_id: str) -> dict:
     for file_path in sorted(uploads_dir.iterdir()):
         if file_path.is_file():
             stat = file_path.stat()
-            relative_path = str(get_paths().sandbox_uploads_dir(thread_id) / file_path.name)
+            relative_path = str(uploads_dir / file_path.name)
             files.append(
                 {
                     "filename": file_path.name,
@@ -210,7 +212,7 @@ async def delete_uploaded_file(thread_id: str, filename: str) -> dict:
     Returns:
         Success message.
     """
-    uploads_dir = get_uploads_dir(thread_id)
+    uploads_dir = get_uploads_dir(thread_id, create=False)
     file_path = uploads_dir / filename
 
     if not file_path.exists():
