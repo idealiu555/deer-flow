@@ -91,55 +91,12 @@ tools:
 
 ### Sandbox
 
-DeerFlow supports multiple sandbox execution modes. Configure your preferred mode in `config.yaml`:
+DeerFlow uses local sandbox execution. Configure it in `config.yaml`:
 
 **Local Execution** (runs sandbox code directly on the host machine):
 ```yaml
 sandbox:
    use: src.sandbox.local:LocalSandboxProvider # Local execution
-```
-
-**Docker Execution** (runs sandbox code in isolated Docker containers):
-```yaml
-sandbox:
-   use: src.community.aio_sandbox:AioSandboxProvider # Docker-based sandbox
-```
-
-**Docker Execution with Kubernetes** (runs sandbox code in Kubernetes pods via provisioner service):
-
-This mode runs each sandbox in an isolated Kubernetes Pod on your **host machine's cluster**. Requires Docker Desktop K8s, OrbStack, or similar local K8s setup.
-
-```yaml
-sandbox:
-   use: src.community.aio_sandbox:AioSandboxProvider
-   provisioner_url: http://provisioner:8002
-```
-
-When using Docker development (`make docker-start`), DeerFlow starts the `provisioner` service only if this provisioner mode is configured. In local or plain Docker sandbox modes, `provisioner` is skipped.
-
-See [Provisioner Setup Guide](docker/provisioner/README.md) for detailed configuration, prerequisites, and troubleshooting.
-
-Choose between local execution or Docker-based isolation:
-
-**Option 1: Local Sandbox** (default, simpler setup):
-```yaml
-sandbox:
-  use: src.sandbox.local:LocalSandboxProvider
-```
-
-**Option 2: Docker Sandbox** (isolated, more secure):
-```yaml
-sandbox:
-  use: src.community.aio_sandbox:AioSandboxProvider
-  port: 8080
-  auto_start: true
-  container_prefix: deer-flow-sandbox
-
-  # Optional: Additional mounts
-  mounts:
-    - host_path: /path/on/host
-      container_path: /path/in/container
-      read_only: false
 ```
 
 ### Skills
@@ -159,7 +116,7 @@ skills:
 - Skills are stored in `deer-flow/skills/{public,custom}/`
 - Each skill has a `SKILL.md` file with metadata
 - Skills are automatically discovered and loaded
-- Available in both local and Docker sandbox via path mapping
+- Available in sandbox via path mapping
 
 ### Title Generation
 
@@ -210,7 +167,6 @@ DeerFlow searches for configuration in this order:
 3. **Use environment variables for secrets** - Don't hardcode API keys
 4. **Keep `config.example.yaml` updated** - Document all new options
 5. **Test configuration changes locally** - Before deploying
-6. **Use Docker sandbox for production** - Better isolation and security
 
 ## Troubleshooting
 
@@ -227,11 +183,6 @@ DeerFlow searches for configuration in this order:
 - Check that `deer-flow/skills/` directory exists
 - Verify skills have valid `SKILL.md` files
 - Check `skills.path` configuration if using custom path
-
-### "Docker sandbox fails to start"
-- Ensure Docker is running
-- Check port 8080 (or configured port) is available
-- Verify Docker image is accessible
 
 ## Examples
 

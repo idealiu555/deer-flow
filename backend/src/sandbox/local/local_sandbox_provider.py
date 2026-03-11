@@ -52,9 +52,5 @@ class LocalSandboxProvider(SandboxProvider):
         return None
 
     def release(self, sandbox_id: str) -> None:
-        # LocalSandbox uses singleton pattern - no cleanup needed.
-        # Note: This method is intentionally not called by SandboxMiddleware
-        # to allow sandbox reuse across multiple turns in a thread.
-        # For Docker-based providers (e.g., AioSandboxProvider), cleanup
-        # happens at application shutdown via the shutdown() method.
+        # LocalSandbox uses singleton pattern; no cleanup needed here.
         pass

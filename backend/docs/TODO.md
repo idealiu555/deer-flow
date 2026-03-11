@@ -14,7 +14,7 @@
 
 ## Planned Features
 
-- [ ] Pooling the sandbox resources to reduce the number of sandbox containers
+- [ ] Pool sandbox resources to reduce startup overhead
 - [ ] Add authentication/authorization layer
 - [ ] Implement rate limiting
 - [ ] Add metrics and monitoring

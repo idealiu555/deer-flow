@@ -133,11 +133,9 @@ The fastest way to get started with a consistent environment:
 
 1. **Initialize and start**:
    ```bash
-   make docker-init    # Pull sandbox image (Only once or when image updates)
-   make docker-start   # Start services (auto-detects sandbox mode from config.yaml)
+   make docker-init    # Pull remote images (only once, optional)
+   make docker-start   # Start services
    ```
-
-   `make docker-start` now starts `provisioner` only when `config.yaml` uses provisioner mode (`sandbox.use: src.community.aio_sandbox:AioSandboxProvider` with `provisioner_url`).
 
 2. **Access**: http://localhost:2026
 
@@ -159,28 +157,18 @@ Prerequisite: complete the "Configuration" steps above first (`make config` and 
    make install  # Install backend + frontend dependencies
    ```
 
-3. **(Optional) Pre-pull sandbox image**:
-   ```bash
-   # Recommended if using Docker/Container-based sandbox
-   make setup-sandbox
-   ```
-
-4. **Start services**:
+3. **Start services**:
    ```bash
    make dev
    ```
 
-5. **Access**: http://localhost:2026
+4. **Access**: http://localhost:2026
 
 ### Advanced
 #### Sandbox Mode
 
-DeerFlow supports multiple sandbox execution modes:
+DeerFlow uses local sandbox execution by default:
 - **Local Execution** (runs sandbox code directly on the host machine)
-- **Docker Execution** (runs sandbox code in isolated Docker containers)
-- **Docker Execution with Kubernetes** (runs sandbox code in Kubernetes pods via provisioner service)
-
-For Docker development, service startup follows `config.yaml` sandbox mode. In Local/Docker modes, `provisioner` is not started.
 
 See the [Sandbox Configuration Guide](backend/docs/CONFIGURATION.md#sandbox) to configure your preferred mode.
 
@@ -324,7 +312,7 @@ Skills are loaded progressively — only when the task needs them, not all at on
 Tools follow the same philosophy. DeerFlow comes with a core toolset — web search, web fetch, file operations, bash execution — and supports custom tools via MCP servers and Python functions. Swap anything. Add anything.
 
 ```
-# Paths inside the sandbox container
+# Paths inside the sandbox
 /mnt/skills/public
 ├── research/SKILL.md
 ├── report-generation/SKILL.md
@@ -377,12 +365,12 @@ This is how DeerFlow handles tasks that take minutes to hours: a research task m
 
 DeerFlow doesn't just *talk* about doing things. It has its own computer.
 
-Each task runs inside an isolated Docker container with a full filesystem — skills, workspace, uploads, outputs. The agent reads, writes, and edits files. It executes bash commands and codes. It views images. All sandboxed, all auditable, zero contamination between sessions.
+Each task runs inside an isolated local sandbox with a full filesystem — skills, workspace, uploads, outputs. The agent reads, writes, and edits files. It executes bash commands and code. It views images. All sandboxed, all auditable, zero contamination between sessions.
 
 This is the difference between a chatbot with tool access and an agent with an actual execution environment.
 
 ```
-# Paths inside the sandbox container
+# Paths inside the sandbox
 /mnt/user-data/
 ├── uploads/          ← your files
 ├── workspace/        ← agents' working directory
@@ -447,7 +435,7 @@ All dict-returning methods are validated against Gateway Pydantic response model
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, workflow, and guidelines.
 
-Regression coverage includes Docker sandbox mode detection and provisioner kubeconfig-path handling tests in `backend/tests/`.
+Regression coverage includes backend and frontend core workflows in `backend/tests/` and frontend tests.
 
 ## License
 

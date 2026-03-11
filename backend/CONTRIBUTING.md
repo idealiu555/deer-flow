@@ -20,7 +20,6 @@ Thank you for your interest in contributing to DeerFlow! This document provides 
 - Python 3.12 or higher
 - [uv](https://docs.astral.sh/uv/) package manager
 - Git
-- Docker (optional, for Docker sandbox testing)
 
 ### Fork and Clone
 
@@ -117,7 +116,6 @@ backend/src/
 │   ├── tavily/             # Tavily web search
 │   ├── jina/               # Jina web fetch
 │   ├── firecrawl/          # Firecrawl scraping
-│   └── aio_sandbox/        # Docker sandbox
 │
 ├── reflection/              # Dynamic loading
 │   └── __init__.py         # Module resolution

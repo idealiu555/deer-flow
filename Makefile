@@ -7,7 +7,6 @@ help:
 	@echo "  make config          - Generate local config files (aborts if config already exists)"
 	@echo "  make check           - Check if all required tools are installed"
 	@echo "  make install         - Install all dependencies (frontend + backend)"
-	@echo "  make setup-sandbox   - Pre-pull sandbox container image (recommended)"
 	@echo "  make dev             - Start all services in development mode (with hot-reloading)"
 	@echo "  make dev-daemon      - Start all services in background (daemon mode)"
 	@echo "  make start           - Start all services in production mode (optimized, no hot-reloading)"
@@ -15,8 +14,8 @@ help:
 	@echo "  make clean           - Clean up processes and temporary files"
 	@echo ""
 	@echo "Docker Development Commands:"
-	@echo "  make docker-init     - Build the custom k3s image (with pre-cached sandbox image)"
-	@echo "  make docker-start    - Start Docker services (mode-aware from config.yaml, localhost:2026)"
+	@echo "  make docker-init     - Pre-pull remote images"
+	@echo "  make docker-start    - Start Docker services (localhost:2026)"
 	@echo "  make docker-stop     - Stop Docker development services"
 	@echo "  make docker-logs     - View Docker development logs"
 	@echo "  make docker-logs-frontend - View Docker frontend logs"
@@ -42,43 +41,6 @@ install:
 	@echo "Installing frontend dependencies..."
 	@cd frontend && pnpm install
 	@echo "✓ All dependencies installed"
-	@echo ""
-	@echo "=========================================="
-	@echo "  Optional: Pre-pull Sandbox Image"
-	@echo "=========================================="
-	@echo ""
-	@echo "If you plan to use Docker/Container-based sandbox, you can pre-pull the image:"
-	@echo "  make setup-sandbox"
-	@echo ""
-
-# Pre-pull sandbox Docker image (optional but recommended)
-setup-sandbox:
-	@echo "=========================================="
-	@echo "  Pre-pulling Sandbox Container Image"
-	@echo "=========================================="
-	@echo ""
-	@IMAGE=$$(grep -A 20 "# sandbox:" config.yaml 2>/dev/null | grep "image:" | awk '{print $$2}' | head -1); \
-	if [ -z "$$IMAGE" ]; then \
-		IMAGE="enterprise-public-cn-beijing.cr.volces.com/vefaas-public/all-in-one-sandbox:latest"; \
-		echo "Using default image: $$IMAGE"; \
-	else \
-		echo "Using configured image: $$IMAGE"; \
-	fi; \
-	echo ""; \
-	if command -v container >/dev/null 2>&1 && [ "$$(uname)" = "Darwin" ]; then \
-		echo "Detected Apple Container on macOS, pulling image..."; \
-		container pull "$$IMAGE" || echo "⚠ Apple Container pull failed, will try Docker"; \
-	fi; \
-	if command -v docker >/dev/null 2>&1; then \
-		echo "Pulling image using Docker..."; \
-		docker pull "$$IMAGE"; \
-		echo ""; \
-		echo "✓ Sandbox image pulled successfully"; \
-	else \
-		echo "✗ Neither Docker nor Apple Container is available"; \
-		echo "  Please install Docker: https://docs.docker.com/get-docker/"; \
-		exit 1; \
-	fi
 
 # Start all services in development mode (with hot-reloading)
 dev:
@@ -104,8 +66,6 @@ stop:
 	@-nginx -c $(PWD)/docker/nginx/nginx.local.conf -p $(PWD) -s quit 2>/dev/null || true
 	@sleep 1
 	@-pkill -9 nginx 2>/dev/null || true
-	@echo "Cleaning up sandbox containers..."
-	@-./scripts/cleanup-containers.sh deer-flow-sandbox 2>/dev/null || true
 	@echo "✓ All services stopped"
 
 # Clean up

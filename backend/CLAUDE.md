@@ -11,7 +11,6 @@ DeerFlow is a LangGraph-based AI super agent system with a full-stack architectu
 - **Gateway API** (port 8001): REST API for models, MCP, skills, memory, artifacts, and uploads
 - **Frontend** (port 3000): Next.js web interface
 - **Nginx** (port 2026): Unified reverse proxy entry point
-- **Provisioner** (port 8002, optional in Docker dev): Started only when sandbox is configured for provisioner/Kubernetes mode
 
 **Project Structure**:
 ```
@@ -45,7 +44,7 @@ deer-flow/
 │   │   ├── models/            # Model factory with thinking/vision support
 │   │   ├── skills/            # Skills discovery, loading, parsing
 │   │   ├── config/            # Configuration system (app, model, sandbox, tool, etc.)
-│   │   ├── community/         # Community tools (tavily, jina_ai, firecrawl, image_search, aio_sandbox)
+│   │   ├── community/         # Community tools (tavily, jina_ai, firecrawl, image_search)
 │   │   ├── reflection/        # Dynamic module loading (resolve_variable, resolve_class)
 │   │   ├── utils/             # Utilities (network, readability)
 │   │   └── client.py          # Embedded Python client (DeerFlowClient)
@@ -87,12 +86,6 @@ make test       # Run all backend tests
 make lint       # Lint with ruff
 make format     # Format code with ruff
 ```
-
-Regression tests related to Docker/provisioner behavior:
-- `tests/test_docker_sandbox_mode_detection.py` (mode detection from `config.yaml`)
-- `tests/test_provisioner_kubeconfig.py` (kubeconfig file/directory handling)
-
-CI runs these regression tests for every pull request via [.github/workflows/backend-unit-tests.yml](../.github/workflows/backend-unit-tests.yml).
 
 ## Architecture
 
@@ -177,7 +170,6 @@ Proxied through nginx: `/api/langgraph/*` → LangGraph, all other `/api/*` → 
 **Provider Pattern**: `SandboxProvider` with `acquire`, `get`, `release` lifecycle
 **Implementations**:
 - `LocalSandboxProvider` - Singleton local filesystem execution with path mappings
-- `AioSandboxProvider` (`src/community/`) - Docker-based isolation
 
 **Virtual Path System**:
 - Agent sees: `/mnt/user-data/{workspace,uploads,outputs}`, `/mnt/skills`

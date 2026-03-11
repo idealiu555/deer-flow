@@ -153,17 +153,14 @@ class ThreadState(AgentState):
                       │  - release()            │
                       └────────────┬────────────┘
                                    │
-              ┌────────────────────┼────────────────────┐
-              │                                         │
-              ▼                                         ▼
-┌─────────────────────────┐              ┌─────────────────────────┐
-│  LocalSandboxProvider   │              │  AioSandboxProvider     │
-│  (src/sandbox/local.py) │              │  (src/community/)       │
-│                         │              │                         │
-│  - Singleton instance   │              │  - Docker-based         │
-│  - Direct execution     │              │  - Isolated containers  │
-│  - Development use      │              │  - Production use       │
-└─────────────────────────┘              └─────────────────────────┘
+                                   ▼
+                      ┌─────────────────────────┐
+                      │  LocalSandboxProvider   │
+                      │  (src/sandbox/local.py) │
+                      │                         │
+                      │  - Singleton instance   │
+                      │  - Direct execution     │
+                      └─────────────────────────┘
 
                       ┌─────────────────────────┐
                       │        Sandbox          │ (Abstract)
@@ -427,8 +424,7 @@ SKILL.md Format:
 ### Sandbox Isolation
 
 - Agent code executes within sandbox boundaries
-- Local sandbox: Direct execution (development only)
-- Docker sandbox: Container isolation (production recommended)
+- Local sandbox: Direct execution
 - Path traversal prevention in file operations
 
 ### API Security
