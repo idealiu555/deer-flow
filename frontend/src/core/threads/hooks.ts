@@ -25,7 +25,6 @@ export type ToolEndEvent = {
 export type ThreadStreamOptions = {
   threadId?: string | null | undefined;
   context: LocalSettings["context"];
-  isMock?: boolean;
   onStart?: (threadId: string) => void;
   onFinish?: (state: AgentThreadState) => void;
   onToolEnd?: (event: ToolEndEvent) => void;
@@ -34,7 +33,6 @@ export type ThreadStreamOptions = {
 export function useThreadStream({
   threadId,
   context,
-  isMock,
   onStart,
   onFinish,
   onToolEnd,
@@ -46,6 +44,7 @@ export function useThreadStream({
   // and to allow access to the current thread id in onUpdateEvent
   const threadIdRef = useRef<string | null>(threadId ?? null);
   const startedRef = useRef(false);
+  const [hasSeenTitleGeneration, setHasSeenTitleGeneration] = useState(false);
 
   const listeners = useRef({
     onStart,
@@ -60,6 +59,9 @@ export function useThreadStream({
 
   useEffect(() => {
     const normalizedThreadId = threadId ?? null;
+    if (threadIdRef.current !== normalizedThreadId) {
+      setHasSeenTitleGeneration(false);
+    }
     if (!normalizedThreadId) {
       // Just reset for new thread creation when threadId becomes null/undefined
       startedRef.current = false;
@@ -87,7 +89,7 @@ export function useThreadStream({
   const updateSubtask = useUpdateSubtask();
 
   const thread = useStream<AgentThreadState>({
-    client: getAPIClient(isMock),
+    client: getAPIClient(),
     assistantId: "lead_agent",
     threadId: onStreamThreadId,
     reconnectOnMount: true,
@@ -134,6 +136,15 @@ export function useThreadStream({
       }
     },
     onCustomEvent(event: unknown) {
+      if (
+        typeof event === "object" &&
+        event !== null &&
+        "type" in event &&
+        event.type === "title_generation"
+      ) {
+        setHasSeenTitleGeneration(true);
+        return;
+      }
       if (
         typeof event === "object" &&
         event !== null &&
@@ -357,7 +368,13 @@ export function useThreadStream({
         } as typeof thread)
       : thread;
 
-  return [mergedThread, sendMessage] as const;
+  return [mergedThread, sendMessage, hasSeenTitleGeneration] as const;
+}
+
+export function shouldHideLateTitleGenerationReasoning(
+  hasSeenTitleGeneration: boolean,
+) {
+  return hasSeenTitleGeneration;
 }
 
 export function useThreads(

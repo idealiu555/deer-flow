@@ -38,7 +38,6 @@ import {
   useThreads,
 } from "@/core/threads/hooks";
 import { pathOfThread, titleOfThread } from "@/core/threads/utils";
-import { env } from "@/env";
 
 export function RecentChatList() {
   const { t } = useI18n();
@@ -116,11 +115,7 @@ export function RecentChatList() {
   return (
     <>
       <SidebarGroup>
-        <SidebarGroupLabel>
-          {env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true"
-            ? t.sidebar.recentChats
-            : t.sidebar.demoChats}
-        </SidebarGroupLabel>
+        <SidebarGroupLabel>{t.sidebar.recentChats}</SidebarGroupLabel>
         <SidebarGroupContent className="group-data-[collapsible=icon]:pointer-events-none group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0">
           <SidebarMenu>
             <div className="flex w-full flex-col gap-1">
@@ -139,49 +134,47 @@ export function RecentChatList() {
                         >
                           {titleOfThread(thread)}
                         </Link>
-                        {env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY !== "true" && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <SidebarMenuAction
-                                showOnHover
-                                className="bg-background/50 hover:bg-background"
-                              >
-                                <MoreHorizontal />
-                                <span className="sr-only">{t.common.more}</span>
-                              </SidebarMenuAction>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent
-                              className="w-48 rounded-lg"
-                              side={"right"}
-                              align={"start"}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <SidebarMenuAction
+                              showOnHover
+                              className="bg-background/50 hover:bg-background"
                             >
-                              <DropdownMenuItem
-                                onSelect={() =>
-                                  handleRenameClick(
-                                    thread.thread_id,
-                                    titleOfThread(thread),
-                                  )
-                                }
-                              >
-                                <Pencil className="text-muted-foreground" />
-                                <span>{t.common.rename}</span>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onSelect={() => handleShare(thread.thread_id)}
-                              >
-                                <Share2 className="text-muted-foreground" />
-                                <span>{t.common.share}</span>
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onSelect={() => handleDelete(thread.thread_id)}
-                              >
-                                <Trash2 className="text-muted-foreground" />
-                                <span>{t.common.delete}</span>
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
+                              <MoreHorizontal />
+                              <span className="sr-only">{t.common.more}</span>
+                            </SidebarMenuAction>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            className="w-48 rounded-lg"
+                            side={"right"}
+                            align={"start"}
+                          >
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                handleRenameClick(
+                                  thread.thread_id,
+                                  titleOfThread(thread),
+                                )
+                              }
+                            >
+                              <Pencil className="text-muted-foreground" />
+                              <span>{t.common.rename}</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => handleShare(thread.thread_id)}
+                            >
+                              <Share2 className="text-muted-foreground" />
+                              <span>{t.common.share}</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onSelect={() => handleDelete(thread.thread_id)}
+                            >
+                              <Trash2 className="text-muted-foreground" />
+                              <span>{t.common.delete}</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

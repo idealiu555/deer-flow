@@ -3,10 +3,16 @@
 import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from src.config.memory_config import get_memory_config
+
+CN_TIMEZONE = timezone(timedelta(hours=8))
+
+
+def _now_cn() -> datetime:
+    return datetime.now(CN_TIMEZONE)
 
 
 @dataclass
@@ -15,7 +21,7 @@ class ConversationContext:
 
     thread_id: str
     messages: list[Any]
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=_now_cn)
     agent_name: str | None = None
 
 

@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from src.agents.memory.prompt import (
     MEMORY_UPDATE_PROMPT,
@@ -14,6 +15,12 @@ from src.agents.memory.prompt import (
 from src.config.memory_config import get_memory_config
 from src.config.paths import get_paths
 from src.models import create_chat_model
+
+CN_TIMEZONE = ZoneInfo("Asia/Shanghai")
+
+
+def _now_cn_iso() -> str:
+    return datetime.now(CN_TIMEZONE).isoformat()
 
 
 def _get_memory_file_path(agent_name: str | None = None) -> Path:
@@ -41,7 +48,7 @@ def _create_empty_memory() -> dict[str, Any]:
     """Create an empty memory structure."""
     return {
         "version": "1.0",
-        "lastUpdated": datetime.utcnow().isoformat() + "Z",
+        "lastUpdated": _now_cn_iso(),
         "user": {
             "workContext": {"summary": "", "updatedAt": ""},
             "personalContext": {"summary": "", "updatedAt": ""},
@@ -150,6 +157,39 @@ _UPLOAD_SENTENCE_RE = re.compile(
 )
 
 
+def _extract_text_content(content: Any) -> str:
+    """Extract plain text from model response content."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        texts: list[str] = []
+        for part in content:
+            if isinstance(part, str) and part.strip():
+                texts.append(part.strip())
+                continue
+            if isinstance(part, dict):
+                text = part.get("text")
+                if isinstance(text, str) and text.strip():
+                    texts.append(text.strip())
+        return "\n".join(texts).strip()
+    return str(content) if content else ""
+
+
+def _extract_json_payload(text: str) -> str:
+    """Extract JSON object text from model output."""
+    payload = text.strip()
+    if payload.startswith("```"):
+        payload = re.sub(r"^```(?:json)?\s*", "", payload, flags=re.IGNORECASE)
+        payload = re.sub(r"\s*```$", "", payload)
+        payload = payload.strip()
+
+    start = payload.find("{")
+    end = payload.rfind("}")
+    if start != -1 and end != -1 and start < end:
+        return payload[start : end + 1]
+    return payload
+
+
 def _strip_upload_mentions_from_memory(memory_data: dict[str, Any]) -> dict[str, Any]:
     """Remove sentences about file uploads from all memory summaries and facts.
 
@@ -190,7 +230,7 @@ def _save_memory_to_file(memory_data: dict[str, Any], agent_name: str | None = N
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Update lastUpdated timestamp
-        memory_data["lastUpdated"] = datetime.utcnow().isoformat() + "Z"
+        memory_data["lastUpdated"] = _now_cn_iso()
 
         # Write atomically using temp file
         temp_path = file_path.with_suffix(".tmp")
@@ -269,15 +309,10 @@ class MemoryUpdater:
             # Call LLM
             model = self._get_model()
             response = model.invoke(prompt)
-            response_text = str(response.content).strip()
+            response_text = _extract_text_content(response.content)
 
             # Parse response
-            # Remove markdown code blocks if present
-            if response_text.startswith("```"):
-                lines = response_text.split("\n")
-                response_text = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
-
-            update_data = json.loads(response_text)
+            update_data = json.loads(_extract_json_payload(response_text))
 
             # Apply updates
             updated_memory = self._apply_updates(current_memory, update_data, thread_id)
@@ -315,7 +350,7 @@ class MemoryUpdater:
             Updated memory data.
         """
         config = get_memory_config()
-        now = datetime.utcnow().isoformat() + "Z"
+        now = _now_cn_iso()
 
         # Update user sections
         user_updates = update_data.get("user", {})

@@ -29,6 +29,9 @@ type MessageGroup =
 export function groupMessages<T>(
   messages: Message[],
   mapper: (group: MessageGroup) => T,
+  options?: {
+    hideLateTitleGenerationReasoning?: boolean;
+  },
 ): T[] {
   if (messages.length === 0) {
     return [];
@@ -86,6 +89,7 @@ export function groupMessages<T>(
     }
 
     if (message.type === "ai") {
+      const hasVisibleContent = hasContent(message);
       if (hasPresentFiles(message)) {
         groups.push({
           id: message.id,
@@ -98,7 +102,7 @@ export function groupMessages<T>(
           type: "assistant:subagent",
           messages: [message],
         });
-      } else if (hasReasoning(message) || hasToolCalls(message)) {
+      } else if (hasToolCalls(message) || hasReasoning(message)) {
         const lastGroup = groups[groups.length - 1];
         // Accumulate consecutive intermediate AI messages into one processing group.
         if (lastGroup?.type !== "assistant:processing") {
@@ -112,15 +116,53 @@ export function groupMessages<T>(
         }
       }
 
-      // Not an else-if: a message with reasoning + content (but no tool calls) goes
-      // into the processing group above AND gets its own assistant bubble here.
-      if (hasContent(message) && !hasToolCalls(message)) {
+      if (hasVisibleContent && !hasToolCalls(message)) {
         groups.push({ id: message.id, type: "assistant", messages: [message] });
       }
     }
   }
 
+  let currentHumanTurn = 0;
+  let hasTerminalAssistantGroupInTurn = false;
+
   return groups
+    .filter((group) => {
+      if (group.type === "human") {
+        currentHumanTurn += 1;
+        hasTerminalAssistantGroupInTurn = false;
+        return true;
+      }
+
+      if (
+        group.type === "assistant" ||
+        group.type === "assistant:present-files" ||
+        group.type === "assistant:clarification" ||
+        group.type === "assistant:subagent"
+      ) {
+        hasTerminalAssistantGroupInTurn = true;
+        return true;
+      }
+
+      if (
+        options?.hideLateTitleGenerationReasoning &&
+        group.type === "assistant:processing" &&
+        currentHumanTurn === 1 &&
+        hasTerminalAssistantGroupInTurn &&
+        group.messages.every(
+          (message) =>
+            message.type === "ai" &&
+            hasReasoning(message) &&
+            !hasToolCalls(message) &&
+            !hasContent(message),
+        )
+      ) {
+        // Ignore title-generation reasoning snapshots that arrive after the
+        // first visible assistant answer.
+        return false;
+      }
+
+      return true;
+    })
     .map(mapper)
     .filter((result) => result !== undefined && result !== null) as T[];
 }
@@ -205,7 +247,16 @@ export function hasContent(message: Message) {
     return message.content.trim().length > 0;
   }
   if (Array.isArray(message.content)) {
-    return message.content.length > 0;
+    return message.content.some((content) => {
+      switch (content.type) {
+        case "text":
+          return content.text.trim().length > 0;
+        case "image_url":
+          return Boolean(extractURLFromImageURLContent(content.image_url));
+        default:
+          return false;
+      }
+    });
   }
   return false;
 }

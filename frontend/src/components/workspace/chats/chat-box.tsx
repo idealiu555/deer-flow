@@ -9,7 +9,6 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
-import { env } from "@/env";
 import { cn } from "@/lib/utils";
 
 import {
@@ -58,10 +57,7 @@ const ChatBox: React.FC<{ children: React.ReactNode; threadId: string }> = ({
     //   deselect();
     // }
 
-    if (
-      env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" &&
-      autoSelectFirstArtifact
-    ) {
+    if (autoSelectFirstArtifact) {
       if (thread?.values?.artifacts?.length > 0) {
         setAutoSelectFirstArtifact(false);
         selectArtifact(thread.values.artifacts[0]!);
@@ -78,10 +74,7 @@ const ChatBox: React.FC<{ children: React.ReactNode; threadId: string }> = ({
   ]);
 
   const artifactPanelOpen = useMemo(() => {
-    if (env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true") {
-      return artifactsOpen && artifacts?.length > 0;
-    }
-    return artifactsOpen;
+    return artifactsOpen && artifacts?.length > 0;
   }, [artifactsOpen, artifacts]);
 
   useEffect(() => {

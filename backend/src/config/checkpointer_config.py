@@ -1,6 +1,7 @@
 """Configuration for LangGraph checkpointer."""
 
 from typing import Literal
+from typing import cast
 
 from pydantic import BaseModel, Field
 
@@ -25,22 +26,38 @@ class CheckpointerConfig(BaseModel):
     )
 
 
-# Global configuration instance — None means no checkpointer is configured.
-_checkpointer_config: CheckpointerConfig | None = None
+_UNSET = object()
+
+# Global override configuration instance.
+# `_UNSET` means no override has been applied yet.
+_checkpointer_config: object | CheckpointerConfig | None = _UNSET
 
 
 def get_checkpointer_config() -> CheckpointerConfig | None:
-    """Get the current checkpointer configuration, or None if not configured."""
-    return _checkpointer_config
+    """Get the current override configuration, or None if it was explicitly cleared."""
+    if _checkpointer_config is _UNSET:
+        return None
+    return cast(CheckpointerConfig | None, _checkpointer_config)
+
+
+def has_checkpointer_config_override() -> bool:
+    """Return whether a checkpointer override has been applied."""
+    return _checkpointer_config is not _UNSET
 
 
 def set_checkpointer_config(config: CheckpointerConfig | None) -> None:
-    """Set the checkpointer configuration."""
+    """Set the checkpointer override configuration."""
     global _checkpointer_config
     _checkpointer_config = config
 
 
+def reset_checkpointer_config() -> None:
+    """Clear the checkpointer override state."""
+    global _checkpointer_config
+    _checkpointer_config = _UNSET
+
+
 def load_checkpointer_config_from_dict(config_dict: dict) -> None:
-    """Load checkpointer configuration from a dictionary."""
+    """Load checkpointer override configuration from a dictionary."""
     global _checkpointer_config
     _checkpointer_config = CheckpointerConfig(**config_dict)

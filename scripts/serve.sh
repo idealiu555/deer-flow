@@ -107,6 +107,12 @@ trap cleanup INT TERM
 # ── Start services ────────────────────────────────────────────────────────────
 
 mkdir -p logs
+mkdir -p \
+    logs/nginx-temp/body \
+    logs/nginx-temp/proxy \
+    logs/nginx-temp/fastcgi \
+    logs/nginx-temp/uwsgi \
+    logs/nginx-temp/scgi
 
 if $DEV_MODE; then
     LANGGRAPH_EXTRA_FLAGS=""

@@ -18,6 +18,7 @@ For sync usage see :mod:`src.agents.checkpointer.provider`.
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 from collections.abc import AsyncIterator
 
@@ -32,6 +33,176 @@ from src.agents.checkpointer.provider import (
 from src.config.app_config import get_app_config
 
 logger = logging.getLogger(__name__)
+
+
+class EnhancedAsyncSqliteSaver:
+    """AsyncSqliteSaver wrapper with thread maintenance helpers."""
+
+    def __init__(self, saver):
+        self._saver = saver
+
+    def __getattr__(self, name):
+        return getattr(self._saver, name)
+
+    async def adelete_thread(self, thread_id: str) -> None:
+        await self._saver.adelete_thread(str(thread_id))
+
+    async def adelete_for_runs(self, run_ids) -> None:
+        run_ids = {str(run_id) for run_id in run_ids}
+        if not run_ids:
+            return
+
+        await self._saver.setup()
+        async with self._saver.lock, self._saver.conn.cursor() as cur:
+            await cur.execute(
+                "SELECT thread_id, checkpoint_ns, checkpoint_id, metadata FROM checkpoints"
+            )
+            rows_to_delete: list[tuple[str, str, str]] = []
+            async for thread_id, checkpoint_ns, checkpoint_id, metadata in cur:
+                if not metadata:
+                    continue
+                try:
+                    parsed_metadata = json.loads(metadata)
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                if str(parsed_metadata.get("run_id", "")) in run_ids:
+                    rows_to_delete.append(
+                        (str(thread_id), str(checkpoint_ns), str(checkpoint_id))
+                    )
+
+            if not rows_to_delete:
+                return
+
+            await cur.executemany(
+                "DELETE FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
+                rows_to_delete,
+            )
+            await cur.executemany(
+                "DELETE FROM checkpoints WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
+                rows_to_delete,
+            )
+            await self._saver.conn.commit()
+
+    async def acopy_thread(self, source_thread_id: str, target_thread_id: str) -> None:
+        await self._saver.setup()
+        source_thread_id = str(source_thread_id)
+        target_thread_id = str(target_thread_id)
+        if source_thread_id == target_thread_id:
+            return
+
+        async with self._saver.lock, self._saver.conn.cursor() as cur:
+            await cur.execute("DELETE FROM writes WHERE thread_id = ?", (target_thread_id,))
+            await cur.execute(
+                "DELETE FROM checkpoints WHERE thread_id = ?",
+                (target_thread_id,),
+            )
+            await cur.execute(
+                """
+                SELECT checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata
+                FROM checkpoints
+                WHERE thread_id = ?
+                ORDER BY checkpoint_id ASC
+                """,
+                (source_thread_id,),
+            )
+            checkpoints = await cur.fetchall()
+            if not checkpoints:
+                await self._saver.conn.commit()
+                return
+
+            rewritten = []
+            for checkpoint_ns, checkpoint_id, parent_checkpoint_id, type_, checkpoint, metadata in checkpoints:
+                parsed_metadata = json.loads(metadata) if metadata else {}
+                if "thread_id" in parsed_metadata:
+                    parsed_metadata["thread_id"] = target_thread_id
+                rewritten.append(
+                    (
+                        target_thread_id,
+                        checkpoint_ns,
+                        checkpoint_id,
+                        parent_checkpoint_id,
+                        type_,
+                        checkpoint,
+                        json.dumps(parsed_metadata, ensure_ascii=False).encode("utf-8"),
+                    )
+                )
+
+            await cur.executemany(
+                """
+                INSERT OR REPLACE INTO checkpoints
+                (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                rewritten,
+            )
+            await cur.execute(
+                """
+                INSERT OR REPLACE INTO writes
+                (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value)
+                SELECT ?, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value
+                FROM writes
+                WHERE thread_id = ?
+                """,
+                (target_thread_id, source_thread_id),
+            )
+            await self._saver.conn.commit()
+
+    async def aprune(self, thread_ids, *, strategy: str = "keep_latest") -> None:
+        await self._saver.setup()
+
+        if strategy == "delete_all":
+            for thread_id in thread_ids:
+                await self._saver.adelete_thread(str(thread_id))
+            return
+
+        if strategy != "keep_latest":
+            raise ValueError(f"Unsupported prune strategy: {strategy}")
+
+        async with self._saver.lock, self._saver.conn.cursor() as cur:
+            for thread_id in map(str, thread_ids):
+                await cur.execute(
+                    """
+                    SELECT checkpoint_ns, MAX(checkpoint_id)
+                    FROM checkpoints
+                    WHERE thread_id = ?
+                    GROUP BY checkpoint_ns
+                    """,
+                    (thread_id,),
+                )
+                keep_rows = {
+                    (thread_id, str(checkpoint_ns), str(checkpoint_id))
+                    for checkpoint_ns, checkpoint_id in await cur.fetchall()
+                }
+
+                await cur.execute(
+                    "SELECT thread_id, checkpoint_ns, checkpoint_id FROM checkpoints WHERE thread_id = ?",
+                    (thread_id,),
+                )
+                rows_to_delete = [
+                    (str(tid), str(ns), str(cid))
+                    for tid, ns, cid in await cur.fetchall()
+                    if (str(tid), str(ns), str(cid)) not in keep_rows
+                ]
+                if rows_to_delete:
+                    await cur.executemany(
+                        "DELETE FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
+                        rows_to_delete,
+                    )
+                    await cur.executemany(
+                        "DELETE FROM checkpoints WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
+                        rows_to_delete,
+                    )
+                if keep_rows:
+                    await cur.executemany(
+                        """
+                        UPDATE checkpoints
+                        SET parent_checkpoint_id = NULL
+                        WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?
+                        """,
+                        list(keep_rows),
+                    )
+
+            await self._saver.conn.commit()
 
 # ---------------------------------------------------------------------------
 # Async factory
@@ -61,7 +232,7 @@ async def _async_checkpointer(config) -> AsyncIterator[Checkpointer]:
             pathlib.Path(conn_str).parent.mkdir(parents=True, exist_ok=True)
         async with AsyncSqliteSaver.from_conn_string(conn_str) as saver:
             await saver.setup()
-            yield saver
+            yield EnhancedAsyncSqliteSaver(saver)
         return
 
     if config.type == "postgres":

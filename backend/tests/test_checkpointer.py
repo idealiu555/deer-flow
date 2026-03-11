@@ -6,10 +6,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.agents.checkpointer import get_checkpointer, reset_checkpointer
+from src.config.app_config import reset_app_config
 from src.config.checkpointer_config import (
     CheckpointerConfig,
     get_checkpointer_config,
+    has_checkpointer_config_override,
     load_checkpointer_config_from_dict,
+    reset_checkpointer_config,
     set_checkpointer_config,
 )
 
@@ -17,11 +20,13 @@ from src.config.checkpointer_config import (
 @pytest.fixture(autouse=True)
 def reset_state():
     """Reset singleton state before each test."""
-    set_checkpointer_config(None)
+    reset_checkpointer_config()
     reset_checkpointer()
+    reset_app_config()
     yield
-    set_checkpointer_config(None)
+    reset_checkpointer_config()
     reset_checkpointer()
+    reset_app_config()
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +64,13 @@ class TestCheckpointerConfig:
         load_checkpointer_config_from_dict({"type": "memory"})
         set_checkpointer_config(None)
         assert get_checkpointer_config() is None
+        assert has_checkpointer_config_override() is True
+
+    def test_reset_config_clears_override_state(self):
+        set_checkpointer_config(None)
+        reset_checkpointer_config()
+        assert get_checkpointer_config() is None
+        assert has_checkpointer_config_override() is False
 
     def test_invalid_type_raises(self):
         with pytest.raises(Exception):
@@ -75,7 +87,11 @@ class TestGetCheckpointer:
         """get_checkpointer should return InMemorySaver when not configured."""
         from langgraph.checkpoint.memory import InMemorySaver
 
-        cp = get_checkpointer()
+        mock_config = MagicMock()
+        mock_config.checkpointer = None
+
+        with patch("src.agents.checkpointer.provider.get_app_config", return_value=mock_config):
+            cp = get_checkpointer()
         assert cp is not None
         assert isinstance(cp, InMemorySaver)
 
@@ -169,6 +185,55 @@ class TestGetCheckpointer:
         mock_saver_cls.from_conn_string.assert_called_once_with("postgresql://localhost/db")
         mock_saver_instance.setup.assert_called_once()
 
+    def test_loads_checkpointer_from_app_config_on_first_call(self):
+        """get_checkpointer should honor config.yaml-backed app config on first use."""
+        mock_config = MagicMock()
+        mock_config.checkpointer = CheckpointerConfig(type="sqlite", connection_string="/tmp/test.db")
+
+        mock_saver_instance = MagicMock()
+        mock_cm = MagicMock()
+        mock_cm.__enter__ = MagicMock(return_value=mock_saver_instance)
+        mock_cm.__exit__ = MagicMock(return_value=False)
+
+        mock_saver_cls = MagicMock()
+        mock_saver_cls.from_conn_string = MagicMock(return_value=mock_cm)
+
+        mock_module = MagicMock()
+        mock_module.SqliteSaver = mock_saver_cls
+
+        with (
+            patch("src.agents.checkpointer.provider.get_app_config", return_value=mock_config),
+            patch.dict(sys.modules, {"langgraph.checkpoint.sqlite": mock_module}),
+        ):
+            cp = get_checkpointer()
+
+        assert cp is mock_saver_instance
+        mock_saver_cls.from_conn_string.assert_called_once()
+        mock_saver_instance.setup.assert_called_once()
+
+    def test_explicit_none_override_skips_app_config_checkpointer(self):
+        """An explicit None override should force the in-memory saver."""
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        mock_config = MagicMock()
+        mock_config.checkpointer = CheckpointerConfig(type="sqlite", connection_string="/tmp/test.db")
+
+        set_checkpointer_config(None)
+
+        with patch("src.agents.checkpointer.provider.get_app_config", return_value=mock_config):
+            cp = get_checkpointer()
+
+        assert isinstance(cp, InMemorySaver)
+
+    def test_missing_config_yaml_falls_back_to_in_memory(self):
+        """When no override exists and config file is missing, use in-memory saver."""
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        with patch("src.agents.checkpointer.provider.get_app_config", side_effect=FileNotFoundError):
+            cp = get_checkpointer()
+
+        assert isinstance(cp, InMemorySaver)
+
 
 # ---------------------------------------------------------------------------
 # app_config.py integration
@@ -178,7 +243,7 @@ class TestGetCheckpointer:
 class TestAppConfigLoadsCheckpointer:
     def test_load_checkpointer_section(self):
         """load_checkpointer_config_from_dict populates the global config."""
-        set_checkpointer_config(None)
+        reset_checkpointer_config()
         load_checkpointer_config_from_dict({"type": "memory"})
         cfg = get_checkpointer_config()
         assert cfg is not None

@@ -106,7 +106,7 @@ export type ContextTriggerProps = ComponentProps<typeof Button>;
 export const ContextTrigger = ({ children, ...props }: ContextTriggerProps) => {
   const { usedTokens, maxTokens } = useContextValue();
   const usedPercent = usedTokens / maxTokens;
-  const renderedPercent = new Intl.NumberFormat("en-US", {
+  const renderedPercent = new Intl.NumberFormat("zh-CN", {
     style: "percent",
     maximumFractionDigits: 1,
   }).format(usedPercent);
@@ -146,14 +146,14 @@ export const ContextContentHeader = ({
 }: ContextContentHeaderProps) => {
   const { usedTokens, maxTokens } = useContextValue();
   const usedPercent = usedTokens / maxTokens;
-  const displayPct = new Intl.NumberFormat("en-US", {
+  const displayPct = new Intl.NumberFormat("zh-CN", {
     style: "percent",
     maximumFractionDigits: 1,
   }).format(usedPercent);
-  const used = new Intl.NumberFormat("en-US", {
+  const used = new Intl.NumberFormat("zh-CN", {
     notation: "compact",
   }).format(usedTokens);
-  const total = new Intl.NumberFormat("en-US", {
+  const total = new Intl.NumberFormat("zh-CN", {
     notation: "compact",
   }).format(maxTokens);
 
@@ -205,7 +205,7 @@ export const ContextContentFooter = ({
         },
       }).costUSD?.totalUSD
     : undefined;
-  const totalCost = new Intl.NumberFormat("en-US", {
+  const totalCost = new Intl.NumberFormat("zh-CN", {
     style: "currency",
     currency: "USD",
   }).format(costUSD ?? 0);
@@ -252,7 +252,7 @@ export const ContextInputUsage = ({
         usage: { input: inputTokens, output: 0 },
       }).costUSD?.totalUSD
     : undefined;
-  const inputCostText = new Intl.NumberFormat("en-US", {
+  const inputCostText = new Intl.NumberFormat("zh-CN", {
     style: "currency",
     currency: "USD",
   }).format(inputCost ?? 0);
@@ -292,7 +292,7 @@ export const ContextOutputUsage = ({
         usage: { input: 0, output: outputTokens },
       }).costUSD?.totalUSD
     : undefined;
-  const outputCostText = new Intl.NumberFormat("en-US", {
+  const outputCostText = new Intl.NumberFormat("zh-CN", {
     style: "currency",
     currency: "USD",
   }).format(outputCost ?? 0);
@@ -332,7 +332,7 @@ export const ContextReasoningUsage = ({
         usage: { reasoningTokens },
       }).costUSD?.totalUSD
     : undefined;
-  const reasoningCostText = new Intl.NumberFormat("en-US", {
+  const reasoningCostText = new Intl.NumberFormat("zh-CN", {
     style: "currency",
     currency: "USD",
   }).format(reasoningCost ?? 0);
@@ -372,7 +372,7 @@ export const ContextCacheUsage = ({
         usage: { cacheReads: cacheTokens, input: 0, output: 0 },
       }).costUSD?.totalUSD
     : undefined;
-  const cacheCostText = new Intl.NumberFormat("en-US", {
+  const cacheCostText = new Intl.NumberFormat("zh-CN", {
     style: "currency",
     currency: "USD",
   }).format(cacheCost ?? 0);
@@ -398,7 +398,7 @@ const TokensWithCost = ({
   <span>
     {tokens === undefined
       ? "—"
-      : new Intl.NumberFormat("en-US", {
+      : new Intl.NumberFormat("zh-CN", {
           notation: "compact",
         }).format(tokens)}
     {costText ? (

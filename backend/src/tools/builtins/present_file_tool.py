@@ -4,16 +4,15 @@ from typing import Annotated
 from langchain.tools import InjectedToolCallId, ToolRuntime, tool
 from langchain_core.messages import ToolMessage
 from langgraph.types import Command
-from langgraph.typing import ContextT
 
-from src.agents.thread_state import ThreadState
+from src.agents.thread_state import ThreadRuntimeContext, ThreadState
 from src.config.paths import VIRTUAL_PATH_PREFIX, get_paths
 
 OUTPUTS_VIRTUAL_PREFIX = f"{VIRTUAL_PATH_PREFIX}/outputs"
 
 
 def _normalize_presented_filepath(
-    runtime: ToolRuntime[ContextT, ThreadState],
+    runtime: ToolRuntime[ThreadRuntimeContext, ThreadState],
     filepath: str,
 ) -> str:
     """Normalize a presented file path to the `/mnt/user-data/outputs/*` contract.
@@ -61,7 +60,7 @@ def _normalize_presented_filepath(
 
 @tool("present_files", parse_docstring=True)
 def present_file_tool(
-    runtime: ToolRuntime[ContextT, ThreadState],
+    runtime: ToolRuntime[ThreadRuntimeContext, ThreadState],
     filepaths: list[str],
     tool_call_id: Annotated[str, InjectedToolCallId],
 ) -> Command:

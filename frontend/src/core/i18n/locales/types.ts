@@ -22,7 +22,6 @@ export interface Translations {
     artifacts: string;
     public: string;
     custom: string;
-    notAvailableInDemoMode: string;
     loading: string;
     version: string;
     lastUpdated: string;
@@ -76,11 +75,6 @@ export interface Translations {
     searchModels: string;
     surpriseMe: string;
     surpriseMePrompt: string;
-    followupLoading: string;
-    followupConfirmTitle: string;
-    followupConfirmDescription: string;
-    followupConfirmAppend: string;
-    followupConfirmReplace: string;
     suggestions: {
       suggestion: string;
       prompt: string;
@@ -103,7 +97,6 @@ export interface Translations {
     recentChats: string;
     newChat: string;
     chats: string;
-    demoChats: string;
     agents: string;
   };
 

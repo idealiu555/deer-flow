@@ -39,8 +39,7 @@ DeerFlow is built on a sophisticated agent-based architecture using the [LangGra
 src/
 ├── app/                    # Next.js App Router pages
 │   ├── api/                # API routes
-│   ├── workspace/          # Main workspace pages
-│   └── mock/               # Mock/demo pages
+│   └── workspace/          # Main workspace pages
 ├── components/             # React components
 │   ├── ui/                 # Reusable UI components
 │   ├── workspace/          # Workspace-specific components

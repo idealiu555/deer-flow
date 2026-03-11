@@ -13,6 +13,12 @@ class ThreadDataState(TypedDict):
     outputs_path: NotRequired[str | None]
 
 
+class ThreadRuntimeContext(TypedDict):
+    thread_id: NotRequired[str]
+    sandbox_id: NotRequired[str]
+    agent_name: NotRequired[str]
+
+
 class ViewedImageData(TypedDict):
     base64: str
     mime_type: str

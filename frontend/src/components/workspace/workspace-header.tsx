@@ -12,7 +12,6 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useI18n } from "@/core/i18n/hooks";
-import { env } from "@/env";
 import { cn } from "@/lib/utils";
 
 export function WorkspaceHeader({ className }: { className?: string }) {
@@ -36,15 +35,9 @@ export function WorkspaceHeader({ className }: { className?: string }) {
           </div>
         ) : (
           <div className="flex items-center justify-between gap-2">
-            {env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" ? (
-              <Link href="/" className="text-primary ml-2 font-serif">
-                DeerFlow
-              </Link>
-            ) : (
-              <div className="text-primary ml-2 cursor-default font-serif">
-                DeerFlow
-              </div>
-            )}
+            <div className="text-primary ml-2 cursor-default font-serif">
+              DeerFlow
+            </div>
             <SidebarTrigger />
           </div>
         )}

@@ -125,23 +125,18 @@ def get_checkpointer() -> Checkpointer:
     if _checkpointer is not None:
         return _checkpointer
 
-    # Ensure app config is loaded before checking checkpointer config
-    # This prevents returning InMemorySaver when config.yaml actually has a checkpointer section
-    # but hasn't been loaded yet
-    from src.config.app_config import _app_config
-    from src.config.checkpointer_config import get_checkpointer_config
+    from src.config.checkpointer_config import (
+        get_checkpointer_config,
+        has_checkpointer_config_override,
+    )
 
-    if _app_config is None:
-        # Only load config if it hasn't been initialized yet
-        # In tests, config may be set directly via set_checkpointer_config()
+    if has_checkpointer_config_override():
+        config = get_checkpointer_config()
+    else:
         try:
-            get_app_config()
+            config = get_app_config().checkpointer
         except FileNotFoundError:
-            # In test environments without config.yaml, this is expected
-            # Tests will set config directly via set_checkpointer_config()
-            pass
-
-    config = get_checkpointer_config()
+            config = None
     if config is None:
         from langgraph.checkpoint.memory import InMemorySaver
 

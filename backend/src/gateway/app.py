@@ -14,7 +14,6 @@ from src.gateway.routers import (
     memory,
     models,
     skills,
-    suggestions,
     uploads,
 )
 
@@ -132,10 +131,6 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
                 "description": "Create and manage custom agents with per-agent config and prompts",
             },
             {
-                "name": "suggestions",
-                "description": "Generate follow-up question suggestions for conversations",
-            },
-            {
                 "name": "channels",
                 "description": "Manage IM channel integrations (Feishu, Slack, Telegram)",
             },
@@ -169,9 +164,6 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
 
     # Agents API is mounted at /api/agents
     app.include_router(agents.router)
-
-    # Suggestions API is mounted at /api/threads/{thread_id}/suggestions
-    app.include_router(suggestions.router)
 
     # Channels API is mounted at /api/channels
     app.include_router(channels.router)

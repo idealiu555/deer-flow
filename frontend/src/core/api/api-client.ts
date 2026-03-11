@@ -6,9 +6,9 @@ import { getLangGraphBaseURL } from "../config";
 
 import { sanitizeRunStreamOptions } from "./stream-mode";
 
-function createCompatibleClient(isMock?: boolean): LangGraphClient {
+function createCompatibleClient(): LangGraphClient {
   const client = new LangGraphClient({
-    apiUrl: getLangGraphBaseURL(isMock),
+    apiUrl: getLangGraphBaseURL(),
   });
 
   const originalRunStream = client.runs.stream.bind(client.runs);
@@ -31,7 +31,7 @@ function createCompatibleClient(isMock?: boolean): LangGraphClient {
 }
 
 let _singleton: LangGraphClient | null = null;
-export function getAPIClient(isMock?: boolean): LangGraphClient {
-  _singleton ??= createCompatibleClient(isMock);
+export function getAPIClient(): LangGraphClient {
+  _singleton ??= createCompatibleClient();
   return _singleton;
 }

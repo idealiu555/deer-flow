@@ -111,14 +111,87 @@ class TestTitleMiddlewareCoreLogic:
         assert title.endswith("...")
         assert title.startswith("这是一个非常长的问题描述")
 
+    def test_generate_title_uses_text_parts_when_content_contains_thinking(self, monkeypatch):
+        _set_test_title_config(max_chars=30)
+        middleware = TitleMiddleware()
+        fake_model = MagicMock()
+        fake_model.ainvoke = AsyncMock(
+            return_value=MagicMock(
+                content=[
+                    {"type": "thinking", "thinking": "internal reasoning"},
+                    {"type": "text", "text": '"只保留标题文本"'},
+                ]
+            )
+        )
+        monkeypatch.setattr("src.agents.middlewares.title_middleware.create_chat_model", lambda **kwargs: fake_model)
+
+        state = {
+            "messages": [
+                HumanMessage(content=[{"type": "text", "text": "请生成一个简短标题"}]),
+                AIMessage(
+                    content=[
+                        {"type": "thinking", "thinking": "do not leak this"},
+                        {"type": "text", "text": "这是助手最终回复"},
+                    ]
+                ),
+            ]
+        }
+
+        title = asyncio.run(middleware._generate_title(state))
+        called_prompt = fake_model.ainvoke.await_args.args[0]
+
+        assert title == "只保留标题文本"
+        assert "do not leak this" not in called_prompt
+        assert "这是助手最终回复" in called_prompt
+
+    def test_generate_title_fallback_when_model_returns_empty_content(self, monkeypatch):
+        _set_test_title_config(max_chars=20)
+        middleware = TitleMiddleware()
+        fake_model = MagicMock()
+        fake_model.ainvoke = AsyncMock(return_value=MagicMock(content=[{"type": "thinking", "thinking": "only reasoning"}]))
+        monkeypatch.setattr("src.agents.middlewares.title_middleware.create_chat_model", lambda **kwargs: fake_model)
+
+        state = {
+            "messages": [
+                HumanMessage(content="请帮我排查前端显示异常并给出修复方案"),
+                AIMessage(content="好的，我来分析"),
+            ]
+        }
+        title = asyncio.run(middleware._generate_title(state))
+
+        assert title == "请帮我排查前端显示异常并给出修复方案"
+
     def test_after_agent_returns_title_only_when_needed(self, monkeypatch):
         middleware = TitleMiddleware()
         monkeypatch.setattr(middleware, "_should_generate_title", lambda state: True)
         monkeypatch.setattr(middleware, "_generate_title", AsyncMock(return_value="核心逻辑回归"))
+        writer = MagicMock()
+        monkeypatch.setattr("src.agents.middlewares.title_middleware.get_stream_writer", lambda: writer)
 
         result = asyncio.run(middleware.aafter_model({"messages": []}, runtime=MagicMock()))
 
         assert result == {"title": "核心逻辑回归"}
+        assert [call.args[0] for call in writer.call_args_list] == [
+            {"type": "title_generation", "phase": "started"},
+            {"type": "title_generation", "phase": "completed"},
+        ]
 
         monkeypatch.setattr(middleware, "_should_generate_title", lambda state: False)
         assert asyncio.run(middleware.aafter_model({"messages": []}, runtime=MagicMock())) is None
+
+    def test_after_model_sync_returns_title_only_when_needed(self, monkeypatch):
+        middleware = TitleMiddleware()
+        monkeypatch.setattr(middleware, "_should_generate_title", lambda state: True)
+        monkeypatch.setattr(middleware, "_generate_title_sync", lambda state: "同步标题")
+        writer = MagicMock()
+        monkeypatch.setattr("src.agents.middlewares.title_middleware.get_stream_writer", lambda: writer)
+
+        result = middleware.after_model({"messages": []}, runtime=MagicMock())
+        assert result == {"title": "同步标题"}
+        assert [call.args[0] for call in writer.call_args_list] == [
+            {"type": "title_generation", "phase": "started"},
+            {"type": "title_generation", "phase": "completed"},
+        ]
+
+        monkeypatch.setattr(middleware, "_should_generate_title", lambda state: False)
+        assert middleware.after_model({"messages": []}, runtime=MagicMock()) is None

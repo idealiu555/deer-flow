@@ -16,28 +16,27 @@ import { ThreadContext } from "@/components/workspace/messages/context";
 import { ThreadTitle } from "@/components/workspace/thread-title";
 import { TodoList } from "@/components/workspace/todo-list";
 import { Welcome } from "@/components/workspace/welcome";
-import { useI18n } from "@/core/i18n/hooks";
 import { useNotification } from "@/core/notification/hooks";
 import { useLocalSettings } from "@/core/settings";
-import { useThreadStream } from "@/core/threads/hooks";
+import {
+  shouldHideLateTitleGenerationReasoning,
+  useThreadStream,
+} from "@/core/threads/hooks";
 import { textOfMessage } from "@/core/threads/utils";
-import { env } from "@/env";
 import { cn } from "@/lib/utils";
 
 export default function ChatPage() {
-  const { t } = useI18n();
   const router = useRouter();
   const [settings, setSettings] = useLocalSettings();
 
-  const { threadId, isNewThread, setIsNewThread, isMock } = useThreadChat();
+  const { threadId, isNewThread, setIsNewThread } = useThreadChat();
   useSpecificChatMode();
 
   const { showNotification } = useNotification();
 
-  const [thread, sendMessage] = useThreadStream({
+  const [thread, sendMessage, hasSeenTitleGeneration] = useThreadStream({
     threadId: isNewThread ? undefined : threadId,
     context: settings.context,
-    isMock,
     onStart: () => {
       setIsNewThread(false);
       // Use router.replace so Next.js Router's internal state is updated.
@@ -75,7 +74,13 @@ export default function ChatPage() {
   }, [thread]);
 
   return (
-    <ThreadContext.Provider value={{ thread, isMock }}>
+    <ThreadContext.Provider
+      value={{
+        thread,
+        hideLateTitleGenerationReasoning:
+          shouldHideLateTitleGenerationReasoning(hasSeenTitleGeneration),
+      }}
+    >
       <ChatBox threadId={threadId}>
         <div className="relative flex size-full min-h-0 justify-between">
           <header
@@ -132,16 +137,10 @@ export default function ChatPage() {
                   extraHeader={
                     isNewThread && <Welcome mode={settings.context.mode} />
                   }
-                  disabled={env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true"}
                   onContextChange={(context) => setSettings("context", context)}
                   onSubmit={handleSubmit}
                   onStop={handleStop}
                 />
-                {env.NEXT_PUBLIC_STATIC_WEBSITE_ONLY === "true" && (
-                  <div className="text-muted-foreground/67 w-full translate-y-12 text-center text-xs">
-                    {t.common.notAvailableInDemoMode}
-                  </div>
-                )}
               </div>
             </div>
           </main>

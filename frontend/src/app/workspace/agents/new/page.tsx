@@ -186,7 +186,9 @@ export default function NewAgentPage() {
   // ── Step 2: chat ───────────────────────────────────────────────────────────
 
   return (
-    <ThreadContext.Provider value={{ thread }}>
+    <ThreadContext.Provider
+      value={{ thread, hideLateTitleGenerationReasoning: false }}
+    >
       <ArtifactsProvider>
         <div className="flex size-full flex-col">
           {header}

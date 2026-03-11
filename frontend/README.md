@@ -79,8 +79,7 @@ NEXT_PUBLIC_LANGGRAPH_BASE_URL="http://localhost:2024"
 src/
 ├── app/                    # Next.js App Router pages
 │   ├── api/                # API routes
-│   ├── workspace/          # Main workspace pages
-│   └── mock/               # Mock/demo pages
+│   └── workspace/          # Main workspace pages
 ├── components/             # React components
 │   ├── ui/                 # Reusable UI components
 │   ├── workspace/          # Workspace-specific components

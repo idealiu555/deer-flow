@@ -176,7 +176,7 @@ def test_thinking_disabled_openai_gateway_format(monkeypatch):
 
 def test_thinking_disabled_langchain_anthropic_format(monkeypatch):
     """When thinking is configured as a direct param (langchain_anthropic),
-    disabling must inject thinking.type=disabled WITHOUT touching extra_body or reasoning_effort."""
+    disabling should not force explicit provider-specific thinking kwargs."""
     wte = {"thinking": {"type": "enabled", "budget_tokens": 8000}}
     cfg = _make_app_config(
         [
@@ -202,9 +202,9 @@ def test_thinking_disabled_langchain_anthropic_format(monkeypatch):
 
     factory_module.create_chat_model(name="anthropic-native", thinking_enabled=False)
 
-    assert captured.get("thinking") == {"type": "disabled"}
+    assert "thinking" not in captured
     assert "extra_body" not in captured
-    # reasoning_effort must be cleared (supports_reasoning_effort=False)
+    # reasoning_effort must be absent (supports_reasoning_effort=False)
     assert captured.get("reasoning_effort") is None
 
 
@@ -318,7 +318,7 @@ def test_thinking_shortcut_enables_thinking_when_thinking_enabled(monkeypatch):
 
 
 def test_thinking_shortcut_disables_thinking_when_thinking_disabled(monkeypatch):
-    """thinking shortcut should participate in the disable path (langchain_anthropic format)."""
+    """thinking shortcut should not force explicit disable kwargs for langchain_anthropic."""
     thinking_settings = {"type": "enabled", "budget_tokens": 8000}
     cfg = _make_app_config(
         [
@@ -344,7 +344,7 @@ def test_thinking_shortcut_disables_thinking_when_thinking_disabled(monkeypatch)
 
     factory_module.create_chat_model(name="shortcut-disable", thinking_enabled=False)
 
-    assert captured.get("thinking") == {"type": "disabled"}
+    assert "thinking" not in captured
     assert "extra_body" not in captured
 
 
@@ -408,5 +408,5 @@ def test_thinking_shortcut_not_leaked_into_model_when_disabled(monkeypatch):
 
     factory_module.create_chat_model(name="no-leak", thinking_enabled=False)
 
-    # The disable path should have set thinking to disabled (not the raw enabled shortcut)
-    assert captured.get("thinking") == {"type": "disabled"}
+    # thinking shortcut should not be passed through when thinking is disabled
+    assert "thinking" not in captured
