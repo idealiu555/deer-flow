@@ -16,7 +16,6 @@ class ThreadDataState(TypedDict):
 class ThreadRuntimeContext(TypedDict):
     thread_id: NotRequired[str]
     sandbox_id: NotRequired[str]
-    agent_name: NotRequired[str]
 
 
 class ViewedImageData(TypedDict):

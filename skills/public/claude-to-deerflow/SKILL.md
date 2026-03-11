@@ -1,6 +1,6 @@
 ---
 name: claude-to-deerflow
-description: "Interact with DeerFlow AI agent platform via its HTTP API. Use this skill when the user wants to send messages or questions to DeerFlow for research/analysis, start a DeerFlow conversation thread, check DeerFlow status or health, list available models/skills/agents in DeerFlow, manage DeerFlow memory, upload files to DeerFlow threads, or delegate complex research tasks to DeerFlow. Also use when the user mentions deerflow, deer flow, or wants to run a deep research task that DeerFlow can handle."
+description: "Interact with DeerFlow AI agent platform via its HTTP API. Use this skill when the user wants to send messages or questions to DeerFlow for research/analysis, start a DeerFlow conversation thread, check DeerFlow status or health, list available models/skills in DeerFlow, manage DeerFlow memory, upload files to DeerFlow threads, or delegate complex research tasks to DeerFlow. Also use when the user mentions deerflow, deer flow, or wants to run a deep research task that DeerFlow can handle."
 ---
 
 # DeerFlow Skill
@@ -136,15 +136,7 @@ curl -s -X PUT "$DEERFLOW_GATEWAY_URL/api/skills/<skill_name>" \
   -d '{"enabled": true}'
 ```
 
-### 7. List Agents
-
-```bash
-curl -s "$DEERFLOW_GATEWAY_URL/api/agents"
-```
-
-Returns: `{"agents": [{"name": "...", ...}, ...]}`
-
-### 8. Get Memory
+### 7. Get Memory
 
 ```bash
 curl -s "$DEERFLOW_GATEWAY_URL/api/memory"
@@ -152,7 +144,7 @@ curl -s "$DEERFLOW_GATEWAY_URL/api/memory"
 
 Returns user context, facts, and conversation history summaries.
 
-### 9. Upload Files to a Thread
+### 8. Upload Files to a Thread
 
 ```bash
 curl -s -X POST "$DEERFLOW_GATEWAY_URL/api/threads/<thread_id>/uploads" \
@@ -161,19 +153,19 @@ curl -s -X POST "$DEERFLOW_GATEWAY_URL/api/threads/<thread_id>/uploads" \
 
 Supports PDF, PPTX, XLSX, DOCX — automatically converts to Markdown.
 
-### 10. List Uploaded Files
+### 9. List Uploaded Files
 
 ```bash
 curl -s "$DEERFLOW_GATEWAY_URL/api/threads/<thread_id>/uploads/list"
 ```
 
-### 11. Get Thread History
+### 10. Get Thread History
 
 ```bash
 curl -s "$DEERFLOW_LANGGRAPH_URL/threads/<thread_id>/history"
 ```
 
-### 12. List Threads
+### 11. List Threads
 
 ```bash
 curl -s -X POST "$DEERFLOW_LANGGRAPH_URL/threads/search" \

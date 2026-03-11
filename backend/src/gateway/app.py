@@ -7,7 +7,6 @@ from fastapi import FastAPI
 from src.config.app_config import get_app_config
 from src.gateway.config import get_gateway_config
 from src.gateway.routers import (
-    agents,
     artifacts,
     channels,
     mcp,
@@ -127,10 +126,6 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
                 "description": "Upload and manage user files for threads",
             },
             {
-                "name": "agents",
-                "description": "Create and manage custom agents with per-agent config and prompts",
-            },
-            {
                 "name": "channels",
                 "description": "Manage IM channel integrations (Feishu, Slack, Telegram)",
             },
@@ -161,9 +156,6 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
 
     # Uploads API is mounted at /api/threads/{thread_id}/uploads
     app.include_router(uploads.router)
-
-    # Agents API is mounted at /api/agents
-    app.include_router(agents.router)
 
     # Channels API is mounted at /api/channels
     app.include_router(channels.router)

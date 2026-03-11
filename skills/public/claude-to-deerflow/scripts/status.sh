@@ -5,7 +5,6 @@
 #   bash status.sh                  # health + summary
 #   bash status.sh models           # list models
 #   bash status.sh skills           # list skills
-#   bash status.sh agents           # list agents
 #   bash status.sh threads          # list recent threads
 #   bash status.sh memory           # show memory
 #   bash status.sh thread <id>      # show thread history
@@ -42,9 +41,6 @@ case "$CMD" in
     ;;
   skills)
     curl -s "${GATEWAY_URL}/api/skills" | python3 -m json.tool
-    ;;
-  agents)
-    curl -s "${GATEWAY_URL}/api/agents" | python3 -m json.tool
     ;;
   threads)
     curl -s -X POST "${LANGGRAPH_URL}/threads/search" \
@@ -92,7 +88,7 @@ else:
     ;;
   *)
     echo "Unknown command: ${CMD}" >&2
-    echo "Usage: status.sh [health|models|skills|agents|threads|memory|thread <id>]" >&2
+    echo "Usage: status.sh [health|models|skills|threads|memory|thread <id>]" >&2
     exit 1
     ;;
 esac
