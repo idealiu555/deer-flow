@@ -356,12 +356,6 @@ checkpointer:
 #     app_id: $FEISHU_APP_ID
 #     app_secret: $FEISHU_APP_SECRET
 #
-#   slack:
-#     enabled: false
-#     bot_token: $SLACK_BOT_TOKEN     # xoxb-...
-#     app_token: $SLACK_APP_TOKEN     # xapp-... (Socket Mode)
-#     allowed_users: []               # empty = allow all
-#
 #   telegram:
 #     enabled: false
 #     bot_token: $TELEGRAM_BOT_TOKEN

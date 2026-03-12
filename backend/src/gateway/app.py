@@ -127,7 +127,7 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
             },
             {
                 "name": "channels",
-                "description": "Manage IM channel integrations (Feishu, Slack, Telegram)",
+                "description": "Manage IM channel integrations (Feishu, Telegram)",
             },
             {
                 "name": "health",

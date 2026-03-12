@@ -107,13 +107,7 @@ export interface Translations {
 
   // Workspace
   workspace: {
-    officialWebsite: string;
     githubTooltip: string;
-    settingsAndMore: string;
-    visitGithub: string;
-    reportIssue: string;
-    contactUs: string;
-    about: string;
   };
 
   // Conversation
@@ -182,7 +176,6 @@ export interface Translations {
       tools: string;
       skills: string;
       notification: string;
-      about: string;
     };
     memory: {
       title: string;

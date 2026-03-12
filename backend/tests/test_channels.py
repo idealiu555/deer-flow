@@ -150,47 +150,47 @@ class TestChannelStore:
         return ChannelStore(path=tmp_path / "store.json")
 
     def test_set_and_get_thread_id(self, store):
-        store.set_thread_id("slack", "ch1", "thread-abc", user_id="u1")
-        assert store.get_thread_id("slack", "ch1") == "thread-abc"
+        store.set_thread_id("telegram", "ch1", "thread-abc", user_id="u1")
+        assert store.get_thread_id("telegram", "ch1") == "thread-abc"
 
     def test_get_nonexistent_returns_none(self, store):
-        assert store.get_thread_id("slack", "nonexistent") is None
+        assert store.get_thread_id("telegram", "nonexistent") is None
 
     def test_remove(self, store):
-        store.set_thread_id("slack", "ch1", "t1")
-        assert store.remove("slack", "ch1") is True
-        assert store.get_thread_id("slack", "ch1") is None
+        store.set_thread_id("telegram", "ch1", "t1")
+        assert store.remove("telegram", "ch1") is True
+        assert store.get_thread_id("telegram", "ch1") is None
 
     def test_remove_nonexistent_returns_false(self, store):
-        assert store.remove("slack", "nope") is False
+        assert store.remove("telegram", "nope") is False
 
     def test_list_entries_all(self, store):
-        store.set_thread_id("slack", "ch1", "t1")
+        store.set_thread_id("telegram", "ch1", "t1")
         store.set_thread_id("feishu", "ch2", "t2")
         entries = store.list_entries()
         assert len(entries) == 2
 
     def test_list_entries_filtered(self, store):
-        store.set_thread_id("slack", "ch1", "t1")
+        store.set_thread_id("telegram", "ch1", "t1")
         store.set_thread_id("feishu", "ch2", "t2")
-        entries = store.list_entries(channel_name="slack")
+        entries = store.list_entries(channel_name="telegram")
         assert len(entries) == 1
-        assert entries[0]["channel_name"] == "slack"
+        assert entries[0]["channel_name"] == "telegram"
 
     def test_persistence(self, tmp_path):
         path = tmp_path / "store.json"
         store1 = ChannelStore(path=path)
-        store1.set_thread_id("slack", "ch1", "t1")
+        store1.set_thread_id("telegram", "ch1", "t1")
 
         store2 = ChannelStore(path=path)
-        assert store2.get_thread_id("slack", "ch1") == "t1"
+        assert store2.get_thread_id("telegram", "ch1") == "t1"
 
     def test_update_preserves_created_at(self, store):
-        store.set_thread_id("slack", "ch1", "t1")
+        store.set_thread_id("telegram", "ch1", "t1")
         entries = store.list_entries()
         created_at = entries[0]["created_at"]
 
-        store.set_thread_id("slack", "ch1", "t2")
+        store.set_thread_id("telegram", "ch1", "t2")
         entries = store.list_entries()
         assert entries[0]["created_at"] == created_at
         assert entries[0]["thread_id"] == "t2"
@@ -1106,58 +1106,6 @@ class TestChannelService:
 
 
 # ---------------------------------------------------------------------------
-# Slack send retry tests
-# ---------------------------------------------------------------------------
-
-
-class TestSlackSendRetry:
-    def test_retries_on_failure_then_succeeds(self):
-        from src.channels.slack import SlackChannel
-
-        async def go():
-            bus = MessageBus()
-            ch = SlackChannel(bus=bus, config={"bot_token": "xoxb-test", "app_token": "xapp-test"})
-
-            mock_web = MagicMock()
-            call_count = 0
-
-            def post_message(**kwargs):
-                nonlocal call_count
-                call_count += 1
-                if call_count < 3:
-                    raise ConnectionError("network error")
-                return MagicMock()
-
-            mock_web.chat_postMessage = post_message
-            ch._web_client = mock_web
-
-            msg = OutboundMessage(channel_name="slack", chat_id="C123", thread_id="t1", text="hello")
-            await ch.send(msg)
-            assert call_count == 3
-
-        _run(go())
-
-    def test_raises_after_all_retries_exhausted(self):
-        from src.channels.slack import SlackChannel
-
-        async def go():
-            bus = MessageBus()
-            ch = SlackChannel(bus=bus, config={"bot_token": "xoxb-test", "app_token": "xapp-test"})
-
-            mock_web = MagicMock()
-            mock_web.chat_postMessage = MagicMock(side_effect=ConnectionError("fail"))
-            ch._web_client = mock_web
-
-            msg = OutboundMessage(channel_name="slack", chat_id="C123", thread_id="t1", text="hello")
-            with pytest.raises(ConnectionError):
-                await ch.send(msg)
-
-            assert mock_web.chat_postMessage.call_count == 3
-
-        _run(go())
-
-
-# ---------------------------------------------------------------------------
 # Telegram send retry tests
 # ---------------------------------------------------------------------------
 
@@ -1214,31 +1162,3 @@ class TestTelegramSendRetry:
 
         _run(go())
 
-
-# ---------------------------------------------------------------------------
-# Slack markdown-to-mrkdwn conversion tests (via markdown_to_mrkdwn library)
-# ---------------------------------------------------------------------------
-
-
-class TestSlackMarkdownConversion:
-    """Verify that the SlackChannel.send() path applies mrkdwn conversion."""
-
-    def test_bold_converted(self):
-        from src.channels.slack import _slack_md_converter
-
-        result = _slack_md_converter.convert("this is **bold** text")
-        assert "*bold*" in result
-        assert "**" not in result
-
-    def test_link_converted(self):
-        from src.channels.slack import _slack_md_converter
-
-        result = _slack_md_converter.convert("[click](https://example.com)")
-        assert "<https://example.com|click>" in result
-
-    def test_heading_converted(self):
-        from src.channels.slack import _slack_md_converter
-
-        result = _slack_md_converter.convert("# Title")
-        assert "*Title*" in result
-        assert "#" not in result
