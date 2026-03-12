@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import pathlib
+import threading
 from collections.abc import Iterator
 
 from langgraph.types import Checkpointer
@@ -56,6 +58,29 @@ def _resolve_sqlite_conn_str(raw: str) -> str:
     return str(resolve_path(raw))
 
 
+def _ensure_sqlite_parent_dir(conn_str: str) -> None:
+    """Create parent directory for filesystem SQLite paths."""
+    if conn_str == ":memory:" or conn_str.startswith("file:"):
+        return
+    pathlib.Path(conn_str).parent.mkdir(parents=True, exist_ok=True)
+
+
+def _resolve_effective_checkpointer_config() -> CheckpointerConfig | None:
+    """Resolve effective checkpointer config with override precedence."""
+    from src.config.checkpointer_config import (
+        get_checkpointer_config,
+        has_checkpointer_config_override,
+    )
+
+    if has_checkpointer_config_override():
+        return get_checkpointer_config()
+
+    try:
+        return get_app_config().checkpointer
+    except FileNotFoundError:
+        return None
+
+
 @contextlib.contextmanager
 def _sync_checkpointer_cm(config: CheckpointerConfig) -> Iterator[Checkpointer]:
     """Context manager that creates and tears down a sync checkpointer.
@@ -79,6 +104,7 @@ def _sync_checkpointer_cm(config: CheckpointerConfig) -> Iterator[Checkpointer]:
             raise ImportError(SQLITE_INSTALL) from exc
 
         conn_str = _resolve_sqlite_conn_str(config.connection_string or "store.db")
+        _ensure_sqlite_parent_dir(conn_str)
         with SqliteSaver.from_conn_string(conn_str) as saver:
             saver.setup()
             logger.info("Checkpointer: using SqliteSaver (%s)", conn_str)
@@ -109,6 +135,7 @@ def _sync_checkpointer_cm(config: CheckpointerConfig) -> Iterator[Checkpointer]:
 
 _checkpointer: Checkpointer | None = None
 _checkpointer_ctx = None  # open context manager keeping the connection alive
+_checkpointer_lock = threading.Lock()
 
 
 def get_checkpointer() -> Checkpointer:
@@ -125,29 +152,21 @@ def get_checkpointer() -> Checkpointer:
     if _checkpointer is not None:
         return _checkpointer
 
-    from src.config.checkpointer_config import (
-        get_checkpointer_config,
-        has_checkpointer_config_override,
-    )
+    with _checkpointer_lock:
+        if _checkpointer is not None:
+            return _checkpointer
 
-    if has_checkpointer_config_override():
-        config = get_checkpointer_config()
-    else:
-        try:
-            config = get_app_config().checkpointer
-        except FileNotFoundError:
-            config = None
-    if config is None:
-        from langgraph.checkpoint.memory import InMemorySaver
+        config = _resolve_effective_checkpointer_config()
+        if config is None:
+            from langgraph.checkpoint.memory import InMemorySaver
 
-        logger.info("Checkpointer: using InMemorySaver (in-process, not persistent)")
-        _checkpointer = InMemorySaver()
+            logger.info("Checkpointer: using InMemorySaver (in-process, not persistent)")
+            _checkpointer = InMemorySaver()
+            return _checkpointer
+
+        _checkpointer_ctx = _sync_checkpointer_cm(config)
+        _checkpointer = _checkpointer_ctx.__enter__()
         return _checkpointer
-
-    _checkpointer_ctx = _sync_checkpointer_cm(config)
-    _checkpointer = _checkpointer_ctx.__enter__()
-
-    return _checkpointer
 
 
 def reset_checkpointer() -> None:
@@ -157,13 +176,16 @@ def reset_checkpointer() -> None:
     Useful in tests or after a configuration change.
     """
     global _checkpointer, _checkpointer_ctx
-    if _checkpointer_ctx is not None:
+    with _checkpointer_lock:
+        checkpointer_ctx = _checkpointer_ctx
+        _checkpointer_ctx = None
+        _checkpointer = None
+
+    if checkpointer_ctx is not None:
         try:
-            _checkpointer_ctx.__exit__(None, None, None)
+            checkpointer_ctx.__exit__(None, None, None)
         except Exception:
             logger.warning("Error during checkpointer cleanup", exc_info=True)
-        _checkpointer_ctx = None
-    _checkpointer = None
 
 
 # ---------------------------------------------------------------------------
@@ -185,12 +207,12 @@ def checkpointer_context() -> Iterator[Checkpointer]:
     Yields an ``InMemorySaver`` when no checkpointer is configured in *config.yaml*.
     """
 
-    config = get_app_config()
-    if config.checkpointer is None:
+    config = _resolve_effective_checkpointer_config()
+    if config is None:
         from langgraph.checkpoint.memory import InMemorySaver
 
         yield InMemorySaver()
         return
 
-    with _sync_checkpointer_cm(config.checkpointer) as saver:
+    with _sync_checkpointer_cm(config) as saver:
         yield saver

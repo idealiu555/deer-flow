@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { Children, isValidElement, useMemo } from "react";
 import type { HTMLAttributes } from "react";
+import type { ReactNode } from "react";
 
 import {
   MessageResponse,
@@ -20,6 +21,88 @@ export type MarkdownContentProps = {
   components?: MessageResponseProps["components"];
 };
 
+type MarkdownParagraphProps = HTMLAttributes<HTMLParagraphElement> & {
+  children?: ReactNode;
+  node?: unknown;
+};
+
+const BLOCK_TAGS = new Set([
+  "address",
+  "article",
+  "aside",
+  "blockquote",
+  "details",
+  "dialog",
+  "div",
+  "dl",
+  "fieldset",
+  "figcaption",
+  "figure",
+  "footer",
+  "form",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "header",
+  "hr",
+  "main",
+  "nav",
+  "ol",
+  "p",
+  "pre",
+  "section",
+  "table",
+  "ul",
+]);
+
+const BLOCK_STREAMDOWN_NODES = new Set([
+  "code-block",
+  "mermaid-block",
+  "table-wrapper",
+]);
+
+function hasBlockDescendant(node: ReactNode): boolean {
+  return Children.toArray(node).some((child) => {
+    if (!isValidElement<Record<string, unknown>>(child)) {
+      return false;
+    }
+
+    const childProps = child.props as {
+      children?: ReactNode;
+      "data-streamdown"?: unknown;
+    };
+
+    if (typeof child.type === "string" && BLOCK_TAGS.has(child.type)) {
+      return true;
+    }
+
+    const dataStreamdown = childProps["data-streamdown"];
+    if (
+      typeof dataStreamdown === "string" &&
+      BLOCK_STREAMDOWN_NODES.has(dataStreamdown)
+    ) {
+      return true;
+    }
+
+    if (childProps.children) {
+      return hasBlockDescendant(childProps.children);
+    }
+
+    return false;
+  });
+}
+
+function SafeParagraph({ children, node: _node, ...props }: MarkdownParagraphProps) {
+  if (hasBlockDescendant(children)) {
+    return <div {...props}>{children}</div>;
+  }
+
+  return <p {...props}>{children}</p>;
+}
+
 /** Renders markdown content. */
 export function MarkdownContent({
   content,
@@ -30,6 +113,7 @@ export function MarkdownContent({
 }: MarkdownContentProps) {
   const components = useMemo(() => {
     return {
+      p: SafeParagraph,
       a: (props: HTMLAttributes<HTMLAnchorElement>) => {
         if (typeof props.children === "string") {
           const match = /^citation:(.+)$/.exec(props.children);

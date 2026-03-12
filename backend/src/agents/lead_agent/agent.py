@@ -6,6 +6,7 @@ from langchain_core.runnables import RunnableConfig
 
 from src.agents.lead_agent.prompt import apply_prompt_template
 from src.agents.middlewares.clarification_middleware import ClarificationMiddleware
+from src.agents.middlewares.memory_context_middleware import MemoryContextMiddleware
 from src.agents.middlewares.memory_middleware import MemoryMiddleware
 from src.agents.middlewares.subagent_limit_middleware import SubagentLimitMiddleware
 from src.agents.middlewares.title_middleware import TitleMiddleware
@@ -198,6 +199,7 @@ Being proactive with task management demonstrates thoroughness and ensures all r
 # SummarizationMiddleware should be early to reduce context before other processing
 # TodoListMiddleware should be before ClarificationMiddleware to allow todo management
 # TitleMiddleware generates title after first exchange
+# MemoryContextMiddleware injects latest memory before model call
 # MemoryMiddleware queues conversation for memory update (after TitleMiddleware)
 # ViewImageMiddleware should be before ClarificationMiddleware to inject image details before LLM
 # ToolErrorHandlingMiddleware should be before ClarificationMiddleware to convert tool exceptions to ToolMessages
@@ -226,6 +228,9 @@ def _build_middlewares(config: RunnableConfig, model_name: str | None):
 
     # Add TitleMiddleware
     middlewares.append(TitleMiddleware())
+
+    # Inject latest memory context on each model call
+    middlewares.append(MemoryContextMiddleware())
 
     # Add MemoryMiddleware (after TitleMiddleware)
     middlewares.append(MemoryMiddleware())

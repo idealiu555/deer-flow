@@ -5,6 +5,9 @@ FROM python:3.12-slim
 RUN apt-get update && apt-get install -y \
     curl \
     build-essential \
+    poppler-utils \
+    qpdf \
+    imagemagick \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker CLI (for DooD: allows starting sandbox containers via host Docker socket)

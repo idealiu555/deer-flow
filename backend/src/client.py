@@ -74,10 +74,10 @@ class DeerFlowClient:
         each ``stream()`` / ``chat()`` call is stateless — ``thread_id``
         is only used for file isolation (uploads / artifacts).
 
-        The system prompt (including date, memory, and skills context) is
-        generated when the internal agent is first created and cached until
-        the configuration key changes. Call :meth:`reset_agent` to force
-        a refresh in long-running processes.
+        The system prompt (including date and skills context) is generated when
+        the internal agent is first created and cached until the configuration
+        key changes. Call :meth:`reset_agent` to force a refresh in long-running
+        processes.
 
     Example::
 
@@ -138,9 +138,8 @@ class DeerFlowClient:
     def reset_agent(self) -> None:
         """Force the internal agent to be recreated on the next call.
 
-        Use this after external changes (e.g. memory updates, skill
-        installations) that should be reflected in the system prompt
-        or tool set.
+        Use this after external changes (e.g. skill installations) that should
+        be reflected in the system prompt or tool set.
         """
         self._agent = None
         self._agent_config_key = None

@@ -5,9 +5,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
+from src.config.checkpointer_config import CheckpointerConfig, reset_checkpointer_config, set_checkpointer_config
+
 
 class TestCheckpointerNoneFix:
     """Tests that checkpointer context managers return InMemorySaver instead of None."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_override_state(self):
+        reset_checkpointer_config()
+        yield
+        reset_checkpointer_config()
 
     @pytest.mark.anyio
     async def test_async_make_checkpointer_returns_in_memory_saver_when_not_configured(self):
@@ -18,7 +26,7 @@ class TestCheckpointerNoneFix:
         mock_config = MagicMock()
         mock_config.checkpointer = None
 
-        with patch("src.agents.checkpointer.async_provider.get_app_config", return_value=mock_config):
+        with patch("src.agents.checkpointer.provider.get_app_config", return_value=mock_config):
             async with make_checkpointer() as checkpointer:
                 # Should return InMemorySaver, not None
                 assert checkpointer is not None
@@ -52,3 +60,41 @@ class TestCheckpointerNoneFix:
 
                 # Empty list is expected for a fresh checkpointer
                 assert result == []
+
+    @pytest.mark.anyio
+    async def test_async_make_checkpointer_falls_back_when_config_file_missing(self):
+        from src.agents.checkpointer.async_provider import make_checkpointer
+
+        with patch("src.agents.checkpointer.provider.get_app_config", side_effect=FileNotFoundError):
+            async with make_checkpointer() as checkpointer:
+                assert isinstance(checkpointer, InMemorySaver)
+
+    def test_sync_checkpointer_context_falls_back_when_config_file_missing(self):
+        from src.agents.checkpointer.provider import checkpointer_context
+
+        with patch("src.agents.checkpointer.provider.get_app_config", side_effect=FileNotFoundError):
+            with checkpointer_context() as checkpointer:
+                assert isinstance(checkpointer, InMemorySaver)
+
+    @pytest.mark.anyio
+    async def test_async_make_checkpointer_honors_explicit_none_override(self):
+        from src.agents.checkpointer.async_provider import make_checkpointer
+
+        set_checkpointer_config(None)
+        mock_config = MagicMock()
+        mock_config.checkpointer = CheckpointerConfig(type="sqlite", connection_string="/tmp/test.db")
+
+        with patch("src.agents.checkpointer.provider.get_app_config", return_value=mock_config):
+            async with make_checkpointer() as checkpointer:
+                assert isinstance(checkpointer, InMemorySaver)
+
+    def test_sync_checkpointer_context_honors_explicit_none_override(self):
+        from src.agents.checkpointer.provider import checkpointer_context
+
+        set_checkpointer_config(None)
+        mock_config = MagicMock()
+        mock_config.checkpointer = CheckpointerConfig(type="sqlite", connection_string="/tmp/test.db")
+
+        with patch("src.agents.checkpointer.provider.get_app_config", return_value=mock_config):
+            with checkpointer_context() as checkpointer:
+                assert isinstance(checkpointer, InMemorySaver)

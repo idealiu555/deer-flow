@@ -1,6 +1,8 @@
 """Unit tests for checkpointer config and singleton factory."""
 
 import sys
+import threading
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -233,6 +235,76 @@ class TestGetCheckpointer:
             cp = get_checkpointer()
 
         assert isinstance(cp, InMemorySaver)
+
+    def test_singleton_initialization_is_thread_safe(self):
+        """Concurrent first calls should initialize the singleton once."""
+        set_checkpointer_config(CheckpointerConfig(type="sqlite", connection_string="/tmp/test.db"))
+
+        cp_instance = MagicMock()
+        enter_count = 0
+        enter_count_lock = threading.Lock()
+
+        def fake_sync_cm(_config):
+            class _CM:
+                def __enter__(self):
+                    nonlocal enter_count
+                    time.sleep(0.05)
+                    with enter_count_lock:
+                        enter_count += 1
+                    return cp_instance
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+            return _CM()
+
+        barrier = threading.Barrier(8)
+        results = []
+        errors = []
+
+        def worker():
+            try:
+                barrier.wait()
+                results.append(get_checkpointer())
+            except Exception as exc:
+                errors.append(exc)
+
+        with patch("src.agents.checkpointer.provider._sync_checkpointer_cm", side_effect=fake_sync_cm):
+            threads = [threading.Thread(target=worker) for _ in range(8)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+
+        assert errors == []
+        assert enter_count == 1
+        assert results and all(cp is cp_instance for cp in results)
+
+    def test_sync_sqlite_ensures_parent_directory_exists(self, tmp_path):
+        """Sync sqlite branch should create missing parent directories."""
+        db_path = tmp_path / "nested" / "checkpoints.db"
+        set_checkpointer_config(CheckpointerConfig(type="sqlite", connection_string=str(db_path)))
+
+        mock_saver_instance = MagicMock()
+        mock_cm = MagicMock()
+        mock_cm.__enter__ = MagicMock(return_value=mock_saver_instance)
+        mock_cm.__exit__ = MagicMock(return_value=False)
+
+        def _from_conn_string(conn_str: str):
+            assert db_path.parent.exists()
+            assert conn_str == str(db_path)
+            return mock_cm
+
+        mock_saver_cls = MagicMock()
+        mock_saver_cls.from_conn_string = MagicMock(side_effect=_from_conn_string)
+
+        mock_module = MagicMock()
+        mock_module.SqliteSaver = mock_saver_cls
+
+        with patch.dict(sys.modules, {"langgraph.checkpoint.sqlite": mock_module}):
+            cp = get_checkpointer()
+
+        assert cp is mock_saver_instance
 
 
 # ---------------------------------------------------------------------------

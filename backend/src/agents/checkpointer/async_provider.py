@@ -28,9 +28,10 @@ from src.agents.checkpointer.provider import (
     POSTGRES_CONN_REQUIRED,
     POSTGRES_INSTALL,
     SQLITE_INSTALL,
+    _ensure_sqlite_parent_dir,
+    _resolve_effective_checkpointer_config,
     _resolve_sqlite_conn_str,
 )
-from src.config.app_config import get_app_config
 
 logger = logging.getLogger(__name__)
 
@@ -224,12 +225,8 @@ async def _async_checkpointer(config) -> AsyncIterator[Checkpointer]:
         except ImportError as exc:
             raise ImportError(SQLITE_INSTALL) from exc
 
-        import pathlib
-
         conn_str = _resolve_sqlite_conn_str(config.connection_string or "store.db")
-        # Only create parent directories for real filesystem paths
-        if conn_str != ":memory:" and not conn_str.startswith("file:"):
-            pathlib.Path(conn_str).parent.mkdir(parents=True, exist_ok=True)
+        _ensure_sqlite_parent_dir(conn_str)
         async with AsyncSqliteSaver.from_conn_string(conn_str) as saver:
             await saver.setup()
             yield EnhancedAsyncSqliteSaver(saver)
@@ -268,13 +265,12 @@ async def make_checkpointer() -> AsyncIterator[Checkpointer]:
     Yields an ``InMemorySaver`` when no checkpointer is configured in *config.yaml*.
     """
 
-    config = get_app_config()
-
-    if config.checkpointer is None:
+    config = _resolve_effective_checkpointer_config()
+    if config is None:
         from langgraph.checkpoint.memory import InMemorySaver
 
         yield InMemorySaver()
         return
 
-    async with _async_checkpointer(config.checkpointer) as saver:
+    async with _async_checkpointer(config) as saver:
         yield saver

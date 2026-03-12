@@ -152,7 +152,6 @@ You are {agent_name}, an open-source super agent.
 </role>
 
 {soul}
-{memory_context}
 
 <thinking_style>
 - Think concisely and strategically about the user's request BEFORE taking action
@@ -280,36 +279,6 @@ Recent breakthroughs in language models have also accelerated progress
 </critical_reminders>
 """
 
-
-def _get_memory_context() -> str:
-    """Get memory context for injection into system prompt.
-
-    Returns:
-        Formatted memory context string wrapped in XML tags, or empty string if disabled.
-    """
-    try:
-        from src.agents.memory import format_memory_for_injection, get_memory_data
-        from src.config.memory_config import get_memory_config
-
-        config = get_memory_config()
-        if not config.enabled or not config.injection_enabled:
-            return ""
-
-        memory_data = get_memory_data()
-        memory_content = format_memory_for_injection(memory_data, max_tokens=config.max_injection_tokens)
-
-        if not memory_content.strip():
-            return ""
-
-        return f"""<memory>
-{memory_content}
-</memory>
-"""
-    except Exception as e:
-        print(f"Failed to load memory context: {e}")
-        return ""
-
-
 def get_skills_prompt_section(available_skills: set[str] | None = None) -> str:
     """Generate the skills prompt section with available skills list.
 
@@ -355,9 +324,6 @@ You have access to skills that provide optimized workflows for specific tasks. E
 
 
 def apply_prompt_template(subagent_enabled: bool = False, max_concurrent_subagents: int = 3, *, available_skills: set[str] | None = None) -> str:
-    # Get memory context
-    memory_context = _get_memory_context()
-
     # Include subagent section only if enabled (from runtime parameter)
     n = max_concurrent_subagents
     subagent_section = _build_subagent_section(n) if subagent_enabled else ""
@@ -388,7 +354,6 @@ def apply_prompt_template(subagent_enabled: bool = False, max_concurrent_subagen
         agent_name="DeerFlow 2.0",
         soul="",
         skills_section=skills_section,
-        memory_context=memory_context,
         subagent_section=subagent_section,
         subagent_reminder=subagent_reminder,
         subagent_thinking=subagent_thinking,
