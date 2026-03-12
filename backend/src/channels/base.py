@@ -59,6 +59,10 @@ class Channel(ABC):
         """
         return False
 
+    async def on_delivery_complete(self, msg: OutboundMessage) -> None:
+        """Hook called after text and all file uploads are processed."""
+        return None
+
     # -- helpers -----------------------------------------------------------
 
     def _make_inbound(
@@ -106,3 +110,8 @@ class Channel(ABC):
                         logger.warning("[%s] file upload skipped for %s", self.name, attachment.filename)
                 except Exception:
                     logger.exception("[%s] failed to upload file %s", self.name, attachment.filename)
+
+            try:
+                await self.on_delivery_complete(msg)
+            except Exception:
+                logger.exception("[%s] failed in delivery-complete hook", self.name)

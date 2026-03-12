@@ -175,10 +175,6 @@ class FeishuChannel(Channel):
                     request = self._CreateMessageRequest.builder().receive_id_type("chat_id").request_body(self._CreateMessageRequestBody.builder().receive_id(msg.chat_id).msg_type("interactive").content(content).build()).build()
                     await asyncio.to_thread(self._api_client.im.v1.message.create, request)
 
-                # Add "DONE" reaction to the original message on final reply
-                if msg.is_final and msg.thread_ts:
-                    await self._add_reaction(msg.thread_ts, "DONE")
-
                 return  # success
             except Exception as exc:
                 last_exc = exc
@@ -195,6 +191,10 @@ class FeishuChannel(Channel):
 
         logger.error("[Feishu] send failed after %d attempts: %s", _max_retries, last_exc)
         raise last_exc  # type: ignore[misc]
+
+    async def on_delivery_complete(self, msg: OutboundMessage) -> None:
+        if msg.is_final and msg.thread_ts:
+            await self._add_reaction(msg.thread_ts, "DONE")
 
     async def send_file(self, msg: OutboundMessage, attachment: ResolvedAttachment) -> bool:
         if not self._api_client:

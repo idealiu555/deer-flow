@@ -5,8 +5,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import mimetypes
+import re
+import uuid
 from collections.abc import Mapping
 from typing import Any
+from urllib.parse import urlsplit
 
 from src.channels.message_bus import InboundMessage, InboundMessageType, MessageBus, OutboundMessage, ResolvedAttachment
 from src.channels.store import ChannelStore
@@ -136,6 +139,10 @@ def _format_artifact_text(artifacts: list[str]) -> str:
 
 
 _OUTPUTS_VIRTUAL_PREFIX = "/mnt/user-data/outputs/"
+_IMAGE_MARKDOWN_RE = re.compile(r"!\[[^\]]*]\((https?://[^)\s]+)\)", re.IGNORECASE)
+_URL_RE = re.compile(r"https?://[^\s<>()]+", re.IGNORECASE)
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
+_MAX_REMOTE_IMAGE_BYTES = 100 * 1024 * 1024
 
 
 def _resolve_attachments(thread_id: str, artifacts: list[str]) -> list[ResolvedAttachment]:
@@ -182,6 +189,103 @@ def _resolve_attachments(thread_id: str, artifacts: list[str]) -> list[ResolvedA
             ))
         except (ValueError, OSError) as exc:
             logger.warning("[Manager] failed to resolve artifact %s: %s", virtual_path, exc)
+    return attachments
+
+
+def _extract_image_urls(text: str) -> list[str]:
+    if not text:
+        return []
+
+    urls: list[str] = []
+    seen: set[str] = set()
+
+    def _push(url: str) -> None:
+        normalized = url.rstrip(".,);]")
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            urls.append(normalized)
+
+    for url in _IMAGE_MARKDOWN_RE.findall(text):
+        _push(url)
+
+    for url in _URL_RE.findall(text):
+        suffix = mimetypes.guess_type(urlsplit(url).path)[0]
+        if suffix and suffix.startswith("image/"):
+            _push(url)
+            continue
+        if any(urlsplit(url).path.lower().endswith(ext) for ext in _IMAGE_EXTENSIONS):
+            _push(url)
+
+    return urls
+
+
+async def _resolve_remote_image_attachments(thread_id: str, text: str, max_images: int = 3) -> list[ResolvedAttachment]:
+    from src.config.paths import get_paths
+
+    urls = _extract_image_urls(text)
+    if not urls:
+        return []
+
+    import httpx
+
+    paths = get_paths()
+    outputs_dir = paths.sandbox_outputs_dir(thread_id)
+    outputs_dir.mkdir(parents=True, exist_ok=True)
+    attachments: list[ResolvedAttachment] = []
+
+    async with httpx.AsyncClient(follow_redirects=False, timeout=15.0) as client:
+        for idx, url in enumerate(urls[:max_images], start=1):
+            parsed = urlsplit(url)
+            if parsed.scheme.lower() != "https":
+                continue
+
+            actual_path = None
+            try:
+                async with client.stream("GET", url) as resp:
+                    if resp.status_code != 200:
+                        continue
+
+                    mime_type = resp.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+                    if not mime_type.startswith("image/"):
+                        continue
+
+                    content_length = resp.headers.get("content-length")
+                    if content_length and int(content_length) > _MAX_REMOTE_IMAGE_BYTES:
+                        continue
+
+                    ext = mimetypes.guess_extension(mime_type) or ".jpg"
+                    filename = f"remote_image_{idx}_{uuid.uuid4().hex[:6]}{ext}"
+                    actual_path = outputs_dir / filename
+
+                    total = 0
+                    too_large = False
+                    with open(actual_path, "wb") as f:
+                        async for chunk in resp.aiter_bytes():
+                            total += len(chunk)
+                            if total > _MAX_REMOTE_IMAGE_BYTES:
+                                too_large = True
+                                break
+                            f.write(chunk)
+
+                    if too_large:
+                        actual_path.unlink(missing_ok=True)
+                        continue
+
+                    attachments.append(
+                        ResolvedAttachment(
+                            virtual_path=f"{_OUTPUTS_VIRTUAL_PREFIX}{filename}",
+                            actual_path=actual_path,
+                            filename=filename,
+                            mime_type=mime_type,
+                            size=total,
+                            is_image=True,
+                        )
+                    )
+            except Exception as exc:
+                logger.warning("[Manager] failed to fetch remote image %s: %s", url, exc)
+                if actual_path is not None:
+                    actual_path.unlink(missing_ok=True)
+
     return attachments
 
 
@@ -395,6 +499,15 @@ class ChannelManager:
             # files remain discoverable even when the upload is skipped or fails.
             if attachments:
                 resolved_text = _format_artifact_text([a.virtual_path for a in attachments])
+                response_text = (response_text + "\n\n" + resolved_text) if response_text else resolved_text
+
+        # If the model returned remote image URLs but no present_files artifacts,
+        # download and attach those images so IM users can view them directly.
+        if not attachments:
+            remote_attachments = await _resolve_remote_image_attachments(thread_id, response_text)
+            if remote_attachments:
+                attachments.extend(remote_attachments)
+                resolved_text = _format_artifact_text([a.virtual_path for a in remote_attachments])
                 response_text = (response_text + "\n\n" + resolved_text) if response_text else resolved_text
 
         if not response_text:
