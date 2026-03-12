@@ -1,5 +1,6 @@
 """Middleware for memory mechanism."""
 
+import logging
 import re
 from typing import Any, override
 
@@ -9,6 +10,8 @@ from langgraph.runtime import Runtime
 
 from src.agents.memory.queue import get_memory_queue
 from src.config.memory_config import get_memory_config
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryMiddlewareState(AgentState):
@@ -117,13 +120,18 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         # Get thread ID from runtime context
         thread_id = runtime.context.get("thread_id")
         if not thread_id:
-            print("MemoryMiddleware: No thread_id in context, skipping memory update")
+            logger.warning(
+                "event=memory_update_skipped reason=missing_thread_id",
+            )
             return None
 
         # Get messages from state
         messages = state.get("messages", [])
         if not messages:
-            print("MemoryMiddleware: No messages in state, skipping memory update")
+            logger.debug(
+                "event=memory_update_skipped reason=empty_messages thread_id=%s",
+                thread_id,
+            )
             return None
 
         # Filter to only keep user inputs and final assistant responses
@@ -135,6 +143,12 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
         assistant_messages = [m for m in filtered_messages if getattr(m, "type", None) == "ai"]
 
         if not user_messages or not assistant_messages:
+            logger.debug(
+                "event=memory_update_skipped reason=insufficient_dialogue thread_id=%s user_messages=%d assistant_messages=%d",
+                thread_id,
+                len(user_messages),
+                len(assistant_messages),
+            )
             return None
 
         # Queue the filtered conversation for memory update

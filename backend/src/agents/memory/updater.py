@@ -1,6 +1,7 @@
 """Memory updater for reading, writing, and updating memory data."""
 
 import json
+import logging
 import re
 import uuid
 from datetime import datetime
@@ -15,6 +16,8 @@ from src.agents.memory.prompt import (
 from src.config.memory_config import get_memory_config
 from src.config.paths import get_paths
 from src.models import create_chat_model
+
+logger = logging.getLogger(__name__)
 
 CN_TIMEZONE = ZoneInfo("Asia/Shanghai")
 
@@ -122,8 +125,12 @@ def _load_memory_from_file() -> dict[str, Any]:
         with open(file_path, encoding="utf-8") as f:
             data = json.load(f)
         return data
-    except (json.JSONDecodeError, OSError) as e:
-        print(f"Failed to load memory file: {e}")
+    except (json.JSONDecodeError, OSError):
+        logger.warning(
+            "event=memory_load_failed path=%s",
+            file_path,
+            exc_info=True,
+        )
         return _create_empty_memory()
 
 
@@ -229,10 +236,17 @@ def _save_memory_to_file(memory_data: dict[str, Any]) -> bool:
 
         _memory_cache = (memory_data, mtime)
 
-        print(f"Memory saved to {file_path}")
+        logger.info(
+            "event=memory_saved path=%s",
+            file_path,
+        )
         return True
-    except OSError as e:
-        print(f"Failed to save memory file: {e}")
+    except OSError:
+        logger.warning(
+            "event=memory_save_failed path=%s",
+            file_path,
+            exc_info=True,
+        )
         return False
 
 
@@ -305,11 +319,18 @@ class MemoryUpdater:
             # Save
             return _save_memory_to_file(updated_memory)
 
-        except json.JSONDecodeError as e:
-            print(f"Failed to parse LLM response for memory update: {e}")
+        except json.JSONDecodeError:
+            logger.warning(
+                "event=memory_update_parse_failed thread_id=%s",
+                thread_id,
+                exc_info=True,
+            )
             return False
-        except Exception as e:
-            print(f"Memory update failed: {e}")
+        except Exception:
+            logger.exception(
+                "event=memory_update_failed thread_id=%s",
+                thread_id,
+            )
             return False
 
     def _apply_updates(

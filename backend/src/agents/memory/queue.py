@@ -1,5 +1,6 @@
 """Memory update queue with debounce mechanism."""
 
+import logging
 import threading
 import time
 from dataclasses import dataclass, field
@@ -7,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from src.config.memory_config import get_memory_config
+
+logger = logging.getLogger(__name__)
 
 CN_TIMEZONE = timezone(timedelta(hours=8))
 
@@ -62,7 +65,11 @@ class MemoryUpdateQueue:
             self._schedule_locked()
             queue_size = len(self._pending)
 
-        print(f"Memory update queued for thread {thread_id}, queue size: {queue_size}")
+        logger.info(
+            "event=memory_update_queued thread_id=%s queue_size=%d",
+            thread_id,
+            queue_size,
+        )
 
     def _enqueue_locked(self, thread_id: str, context: ConversationContext, debounce_seconds: int) -> None:
         now = time.monotonic()
@@ -114,22 +121,37 @@ class MemoryUpdateQueue:
     def _process_contexts(self, contexts_to_process: list[ConversationContext]) -> None:
         from src.agents.memory.updater import MemoryUpdater
 
-        print(f"Processing {len(contexts_to_process)} queued memory updates")
+        logger.info(
+            "event=memory_update_batch_processing batch_size=%d",
+            len(contexts_to_process),
+        )
         updater = MemoryUpdater()
 
         for context in contexts_to_process:
             try:
-                print(f"Updating memory for thread {context.thread_id}")
+                logger.info(
+                    "event=memory_update_started thread_id=%s",
+                    context.thread_id,
+                )
                 success = updater.update_memory(
                     messages=context.messages,
                     thread_id=context.thread_id,
                 )
                 if success:
-                    print(f"Memory updated successfully for thread {context.thread_id}")
+                    logger.info(
+                        "event=memory_update_succeeded thread_id=%s",
+                        context.thread_id,
+                    )
                 else:
-                    print(f"Memory update skipped/failed for thread {context.thread_id}")
-            except Exception as e:
-                print(f"Error updating memory for thread {context.thread_id}: {e}")
+                    logger.warning(
+                        "event=memory_update_skipped_or_failed thread_id=%s",
+                        context.thread_id,
+                    )
+            except Exception:
+                logger.exception(
+                    "event=memory_update_exception thread_id=%s",
+                    context.thread_id,
+                )
 
     def _process_due(self) -> None:
         with self._lock:

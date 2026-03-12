@@ -83,6 +83,7 @@ def _render_inline(inline_token: Token) -> str:
         return escape(inline_token.content)
 
     out: list[str] = []
+    open_links = 0
     for child in inline_token.children:
         token_type = child.type
         if token_type == "text":
@@ -104,8 +105,11 @@ def _render_inline(inline_token: Token) -> str:
             href = escape(href, quote=True)
             if href:
                 out.append(f"<a href='{href}'>")
+                open_links += 1
         elif token_type == "link_close":
-            out.append("</a>")
+            if open_links > 0:
+                out.append("</a>")
+                open_links -= 1
         elif token_type == "image":
             alt = child.attrGet("alt") or child.content or "image"
             src = child.attrGet("src") or ""
@@ -118,6 +122,11 @@ def _render_inline(inline_token: Token) -> str:
         else:
             if child.content:
                 out.append(escape(child.content))
+
+    while open_links > 0:
+        out.append("</a>")
+        open_links -= 1
+
     return "".join(out).strip()
 
 
