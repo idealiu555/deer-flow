@@ -27,6 +27,44 @@ DEFAULT_RUN_CONTEXT: dict[str, Any] = {
     "subagent_enabled": False,
 }
 
+_MODE_PRESETS: dict[str, dict[str, Any]] = {
+    "flash": {
+        "thinking_enabled": False,
+        "is_plan_mode": False,
+        "subagent_enabled": False,
+        "reasoning_effort": "minimal",
+    },
+    "thinking": {
+        "thinking_enabled": True,
+        "is_plan_mode": False,
+        "subagent_enabled": False,
+        "reasoning_effort": "low",
+    },
+    "pro": {
+        "thinking_enabled": True,
+        "is_plan_mode": True,
+        "subagent_enabled": False,
+        "reasoning_effort": "medium",
+    },
+    "ultra": {
+        "thinking_enabled": True,
+        "is_plan_mode": True,
+        "subagent_enabled": True,
+        "reasoning_effort": "high",
+    },
+}
+
+_MODE_ALIASES: dict[str, str] = {
+    "flash": "flash",
+    "fast": "flash",
+    "quick": "flash",
+    "thinking": "thinking",
+    "think": "thinking",
+    "reasoning": "thinking",
+    "pro": "pro",
+    "ultra": "ultra",
+}
+
 
 def _as_dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, Mapping) else {}
@@ -317,6 +355,7 @@ class ChannelManager:
         self._assistant_id = assistant_id
         self._default_session = _as_dict(default_session)
         self._channel_sessions = dict(channel_sessions or {})
+        self._runtime_user_sessions: dict[tuple[str, str], dict[str, Any]] = {}
         self._client = None  # lazy init — langgraph_sdk async client
         self._semaphore: asyncio.Semaphore | None = None
         self._running = False
@@ -330,9 +369,11 @@ class ChannelManager:
 
     def _resolve_run_params(self, msg: InboundMessage, thread_id: str) -> tuple[str, dict[str, Any], dict[str, Any]]:
         channel_layer, user_layer = self._resolve_session_layer(msg)
+        runtime_user_layer = _as_dict(self._runtime_user_sessions.get((msg.channel_name, msg.user_id)))
 
         assistant_id = (
-            user_layer.get("assistant_id")
+            runtime_user_layer.get("assistant_id")
+            or user_layer.get("assistant_id")
             or channel_layer.get("assistant_id")
             or self._default_session.get("assistant_id")
             or self._assistant_id
@@ -345,6 +386,7 @@ class ChannelManager:
             self._default_session.get("config"),
             channel_layer.get("config"),
             user_layer.get("config"),
+            runtime_user_layer.get("config"),
         )
 
         run_context = _merge_dicts(
@@ -352,10 +394,59 @@ class ChannelManager:
             self._default_session.get("context"),
             channel_layer.get("context"),
             user_layer.get("context"),
+            runtime_user_layer.get("context"),
             {"thread_id": thread_id},
         )
 
+        configurable = _merge_dicts(
+            _as_dict(self._default_session.get("config")).get("configurable"),
+            _as_dict(channel_layer.get("config")).get("configurable"),
+            _as_dict(user_layer.get("config")).get("configurable"),
+            _as_dict(runtime_user_layer.get("config")).get("configurable"),
+        )
+        if configurable:
+            run_config["configurable"] = configurable
+
         return assistant_id, run_config, run_context
+
+    @staticmethod
+    def _normalize_mode(raw_mode: str) -> str | None:
+        return _MODE_ALIASES.get(raw_mode.strip().lower())
+
+    def _runtime_user_key(self, msg: InboundMessage) -> tuple[str, str]:
+        return msg.channel_name, msg.user_id
+
+    def _upsert_runtime_user_settings(self, msg: InboundMessage, *, context_updates: dict[str, Any], configurable_updates: dict[str, Any]) -> None:
+        key = self._runtime_user_key(msg)
+        layer = self._runtime_user_sessions.get(key)
+        if layer is None:
+            layer = {}
+            self._runtime_user_sessions[key] = layer
+
+        context = _merge_dicts(layer.get("context"))
+        context.update(context_updates)
+        layer["context"] = context
+
+        config = _merge_dicts(layer.get("config"))
+        configurable = _merge_dicts(config.get("configurable"))
+        configurable.update(configurable_updates)
+        config["configurable"] = configurable
+        layer["config"] = config
+
+    def _effective_mode_for_user(self, msg: InboundMessage) -> str:
+        channel_layer, user_layer = self._resolve_session_layer(msg)
+        runtime_user_layer = _as_dict(self._runtime_user_sessions.get(self._runtime_user_key(msg)))
+        context = _merge_dicts(
+            DEFAULT_RUN_CONTEXT,
+            self._default_session.get("context"),
+            channel_layer.get("context"),
+            user_layer.get("context"),
+            runtime_user_layer.get("context"),
+        )
+        for mode, preset in _MODE_PRESETS.items():
+            if all(context.get(k) == v for k, v in preset.items() if k in ("thinking_enabled", "is_plan_mode", "subagent_enabled")):
+                return mode
+        return "custom"
 
     # -- LangGraph SDK client (lazy) ----------------------------------------
 
@@ -534,6 +625,7 @@ class ChannelManager:
         text = msg.text.strip()
         parts = text.split(maxsplit=1)
         command = parts[0].lower().lstrip("/")
+        argument = parts[1].strip() if len(parts) > 1 else ""
 
         if command == "new":
             # Create a new thread on the LangGraph Server
@@ -555,8 +647,55 @@ class ChannelManager:
             reply = await self._fetch_gateway("/api/models", "models")
         elif command == "memory":
             reply = await self._fetch_gateway("/api/memory", "memory")
+        elif command == "mode":
+            if not argument:
+                current_mode = self._effective_mode_for_user(msg)
+                reply = f"Current mode: {current_mode}\nUsage: /mode flash|thinking|pro|ultra"
+            else:
+                normalized_mode = self._normalize_mode(argument)
+                if normalized_mode is None:
+                    reply = "Invalid mode. Use: /mode flash|thinking|pro|ultra"
+                else:
+                    preset = _MODE_PRESETS[normalized_mode]
+                    self._upsert_runtime_user_settings(
+                        msg,
+                        context_updates=dict(preset),
+                        configurable_updates=dict(preset),
+                    )
+                    reply = f"Mode switched to {normalized_mode}."
+        elif command == "model":
+            if not argument:
+                reply = "Usage: /model <model_name>  (use /models to list available models)"
+            else:
+                from src.config.app_config import get_app_config
+
+                try:
+                    app_config = get_app_config()
+                except Exception:
+                    logger.exception("Failed to load app config for /model command")
+                    reply = "Failed to load model configuration."
+                else:
+                    available_model_names = {model.name for model in app_config.models}
+                    if argument not in available_model_names:
+                        reply = f"Unknown model: {argument}\nUse /models to list available models."
+                    else:
+                        self._upsert_runtime_user_settings(
+                            msg,
+                            context_updates={"model_name": argument},
+                            configurable_updates={"model_name": argument},
+                        )
+                        reply = f"Model switched to {argument}."
         elif command == "help":
-            reply = "Available commands:\n/new — Start a new conversation\n/status — Show current thread info\n/models — List available models\n/memory — Show memory status\n/help — Show this help"
+            reply = (
+                "Available commands:\n"
+                "/new — Start a new conversation\n"
+                "/status — Show current thread info\n"
+                "/mode <flash|thinking|pro|ultra> — Switch response mode\n"
+                "/models — List available models\n"
+                "/model <model_name> — Switch model\n"
+                "/memory — Show memory status\n"
+                "/help — Show this help"
+            )
         else:
             reply = f"Unknown command: /{command}. Type /help for available commands."
 

@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -579,7 +580,127 @@ class TestChannelManager:
 
             assert len(outbound_received) == 1
             assert "/new" in outbound_received[0].text
+            assert "/mode" in outbound_received[0].text
+            assert "/model" in outbound_received[0].text
             assert "/help" in outbound_received[0].text
+
+        _run(go())
+
+    def test_handle_command_mode_switches_runtime_session_for_user(self):
+        from src.channels.manager import ChannelManager
+
+        async def go():
+            bus = MessageBus()
+            store = ChannelStore(path=Path(tempfile.mkdtemp()) / "store.json")
+            manager = ChannelManager(bus=bus, store=store)
+
+            outbound_received = []
+
+            async def capture_outbound(msg):
+                outbound_received.append(msg)
+
+            bus.subscribe_outbound(capture_outbound)
+
+            mock_client = _make_mock_langgraph_client()
+            manager._client = mock_client
+
+            await manager.start()
+
+            await bus.publish_inbound(
+                InboundMessage(
+                    channel_name="test",
+                    chat_id="chat1",
+                    user_id="user1",
+                    text="/mode ultra",
+                    msg_type=InboundMessageType.COMMAND,
+                )
+            )
+            await _wait_for(lambda: len(outbound_received) >= 1)
+            assert "Mode switched to ultra." in outbound_received[-1].text
+
+            await bus.publish_inbound(
+                InboundMessage(
+                    channel_name="test",
+                    chat_id="chat1",
+                    user_id="user1",
+                    text="hello",
+                )
+            )
+
+            await _wait_for(lambda: mock_client.runs.wait.call_count >= 1)
+            await manager.stop()
+
+            call_args = mock_client.runs.wait.call_args
+            assert call_args is not None
+            run_config = call_args.kwargs["config"]
+            run_context = call_args.kwargs["context"]
+
+            assert run_context["thinking_enabled"] is True
+            assert run_context["is_plan_mode"] is True
+            assert run_context["subagent_enabled"] is True
+            assert run_context["reasoning_effort"] == "high"
+
+            assert run_config["configurable"]["thinking_enabled"] is True
+            assert run_config["configurable"]["is_plan_mode"] is True
+            assert run_config["configurable"]["subagent_enabled"] is True
+            assert run_config["configurable"]["reasoning_effort"] == "high"
+
+        _run(go())
+
+    def test_handle_command_model_switches_runtime_session_for_user(self):
+        from src.channels.manager import ChannelManager
+
+        async def go():
+            bus = MessageBus()
+            store = ChannelStore(path=Path(tempfile.mkdtemp()) / "store.json")
+            manager = ChannelManager(bus=bus, store=store)
+
+            outbound_received = []
+
+            async def capture_outbound(msg):
+                outbound_received.append(msg)
+
+            bus.subscribe_outbound(capture_outbound)
+
+            mock_client = _make_mock_langgraph_client()
+            manager._client = mock_client
+
+            mock_app_config = SimpleNamespace(models=[SimpleNamespace(name="qwen-plus"), SimpleNamespace(name="glm-4-plus")])
+
+            await manager.start()
+            with patch("src.config.app_config.get_app_config", return_value=mock_app_config):
+                await bus.publish_inbound(
+                    InboundMessage(
+                        channel_name="test",
+                        chat_id="chat1",
+                        user_id="user1",
+                        text="/model glm-4-plus",
+                        msg_type=InboundMessageType.COMMAND,
+                    )
+                )
+                await _wait_for(lambda: len(outbound_received) >= 1)
+
+            assert "Model switched to glm-4-plus." in outbound_received[-1].text
+
+            await bus.publish_inbound(
+                InboundMessage(
+                    channel_name="test",
+                    chat_id="chat1",
+                    user_id="user1",
+                    text="hello",
+                )
+            )
+
+            await _wait_for(lambda: mock_client.runs.wait.call_count >= 1)
+            await manager.stop()
+
+            call_args = mock_client.runs.wait.call_args
+            assert call_args is not None
+            run_config = call_args.kwargs["config"]
+            run_context = call_args.kwargs["context"]
+
+            assert run_context["model_name"] == "glm-4-plus"
+            assert run_config["configurable"]["model_name"] == "glm-4-plus"
 
         _run(go())
 
@@ -1161,4 +1282,3 @@ class TestTelegramSendRetry:
             assert mock_bot.send_message.call_count == 3
 
         _run(go())
-
