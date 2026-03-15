@@ -12,6 +12,7 @@ from src.gateway.routers import (
     mcp,
     memory,
     models,
+    schedules,
     skills,
     uploads,
 )
@@ -55,7 +56,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logger.exception("No IM channels configured or channel service failed to start")
 
+    # Start scheduler service
+    try:
+        from src.scheduler.service import start_scheduler_service
+
+        scheduler_service = await start_scheduler_service()
+        if getattr(scheduler_service, "_running", False):
+            logger.info("Scheduler service started")
+        else:
+            logger.info("Scheduler service is disabled by config (scheduler.enabled=false)")
+    except Exception:
+        logger.exception("Scheduler service failed to start")
+
     yield
+
+    # Stop scheduler service on shutdown
+    try:
+        from src.scheduler.service import stop_scheduler_service
+
+        await stop_scheduler_service()
+    except Exception:
+        logger.exception("Failed to stop scheduler service")
 
     # Stop channel service on shutdown
     try:
@@ -130,6 +151,10 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
                 "description": "Manage IM channel integrations (Feishu, Telegram)",
             },
             {
+                "name": "schedules",
+                "description": "Manage recurring and one-time scheduled tasks",
+            },
+            {
                 "name": "health",
                 "description": "Health check and system status endpoints",
             },
@@ -159,6 +184,9 @@ This gateway provides custom endpoints for models, MCP configuration, skills, an
 
     # Channels API is mounted at /api/channels
     app.include_router(channels.router)
+
+    # Schedules API is mounted at /api/schedules
+    app.include_router(schedules.router)
 
     @app.get("/health", tags=["health"])
     async def health_check() -> dict:

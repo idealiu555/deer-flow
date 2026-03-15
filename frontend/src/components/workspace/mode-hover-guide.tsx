@@ -47,16 +47,22 @@ export function ModeHoverGuide({
   mode,
   children,
   showTitle = true,
+  triggerId,
 }: {
   mode: AgentMode;
   children: React.ReactNode;
   /** When true, tooltip shows "ModeName: Description". When false, only description. */
   showTitle?: boolean;
+  triggerId?: string;
 }) {
   const { t } = useI18n();
   const label = t.inputBox[getModeLabelKey(mode)];
   const description = t.inputBox[getModeDescriptionKey(mode)];
   const content = showTitle ? `${label}: ${description}` : description;
 
-  return <Tooltip content={content}>{children}</Tooltip>;
+  return (
+    <Tooltip content={content} triggerId={triggerId}>
+      {children}
+    </Tooltip>
+  );
 }

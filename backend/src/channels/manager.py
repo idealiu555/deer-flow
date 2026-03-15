@@ -370,9 +370,13 @@ class ChannelManager:
     def _resolve_run_params(self, msg: InboundMessage, thread_id: str) -> tuple[str, dict[str, Any], dict[str, Any]]:
         channel_layer, user_layer = self._resolve_session_layer(msg)
         runtime_user_layer = _as_dict(self._runtime_user_sessions.get((msg.channel_name, msg.user_id)))
+        metadata = _as_dict(msg.metadata)
+        metadata_run_config = _as_dict(metadata.get("run_config"))
+        metadata_run_context = _as_dict(metadata.get("run_context"))
 
         assistant_id = (
-            runtime_user_layer.get("assistant_id")
+            metadata.get("assistant_id")
+            or runtime_user_layer.get("assistant_id")
             or user_layer.get("assistant_id")
             or channel_layer.get("assistant_id")
             or self._default_session.get("assistant_id")
@@ -387,6 +391,7 @@ class ChannelManager:
             channel_layer.get("config"),
             user_layer.get("config"),
             runtime_user_layer.get("config"),
+            metadata_run_config,
         )
 
         run_context = _merge_dicts(
@@ -395,7 +400,15 @@ class ChannelManager:
             channel_layer.get("context"),
             user_layer.get("context"),
             runtime_user_layer.get("context"),
-            {"thread_id": thread_id},
+            metadata_run_context,
+            {
+                "thread_id": thread_id,
+                "channel_name": msg.channel_name,
+                "chat_id": msg.chat_id,
+                "user_id": msg.user_id,
+                "topic_id": msg.topic_id,
+                "assistant_id": assistant_id,
+            },
         )
 
         configurable = _merge_dicts(
@@ -403,6 +416,7 @@ class ChannelManager:
             _as_dict(channel_layer.get("config")).get("configurable"),
             _as_dict(user_layer.get("config")).get("configurable"),
             _as_dict(runtime_user_layer.get("config")).get("configurable"),
+            _as_dict(metadata_run_config).get("configurable"),
         )
         if configurable:
             run_config["configurable"] = configurable
@@ -543,15 +557,23 @@ class ChannelManager:
         logger.info("[Manager] new thread created on LangGraph Server: thread_id=%s for chat_id=%s topic_id=%s", thread_id, msg.chat_id, msg.topic_id)
         return thread_id
 
-    async def _handle_chat(self, msg: InboundMessage) -> None:
+    async def execute_chat_message(
+        self,
+        msg: InboundMessage,
+        *,
+        send_outbound: bool = True,
+        force_thread_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Execute one chat message against agent and optionally publish outbound."""
         client = self._get_client()
 
-        # Look up existing DeerFlow thread by topic_id (if present)
-        thread_id = None
-        if msg.topic_id:
-            thread_id = self.store.get_thread_id(msg.channel_name, msg.chat_id, topic_id=msg.topic_id)
-            if thread_id:
-                logger.info("[Manager] reusing thread: thread_id=%s for topic_id=%s", thread_id, msg.topic_id)
+        thread_id = force_thread_id
+        if not thread_id:
+            # Look up existing DeerFlow thread by topic_id (if present)
+            if msg.topic_id:
+                thread_id = self.store.get_thread_id(msg.channel_name, msg.chat_id, topic_id=msg.topic_id)
+                if thread_id:
+                    logger.info("[Manager] reusing thread: thread_id=%s for topic_id=%s", thread_id, msg.topic_id)
 
         # No existing thread found — create a new one
         if thread_id is None:
@@ -607,17 +629,31 @@ class ChannelManager:
             else:
                 response_text = "(No response from agent)"
 
-        outbound = OutboundMessage(
-            channel_name=msg.channel_name,
-            chat_id=msg.chat_id,
-            thread_id=thread_id,
-            text=response_text,
-            artifacts=artifacts,
-            attachments=attachments,
-            thread_ts=msg.thread_ts,
-        )
-        logger.info("[Manager] publishing outbound message to bus: channel=%s, chat_id=%s", msg.channel_name, msg.chat_id)
-        await self.bus.publish_outbound(outbound)
+        if send_outbound:
+            outbound = OutboundMessage(
+                channel_name=msg.channel_name,
+                chat_id=msg.chat_id,
+                thread_id=thread_id,
+                text=response_text,
+                artifacts=artifacts,
+                attachments=attachments,
+                thread_ts=msg.thread_ts,
+            )
+            logger.info("[Manager] publishing outbound message to bus: channel=%s, chat_id=%s", msg.channel_name, msg.chat_id)
+            await self.bus.publish_outbound(outbound)
+
+        return {
+            "thread_id": thread_id,
+            "assistant_id": assistant_id,
+            "response_text": response_text,
+            "artifacts": artifacts,
+            "attachments": attachments,
+            "run_config": run_config,
+            "run_context": run_context,
+        }
+
+    async def _handle_chat(self, msg: InboundMessage) -> None:
+        await self.execute_chat_message(msg, send_outbound=True)
 
     # -- command handling --------------------------------------------------
 

@@ -11,6 +11,7 @@ from src.config.extensions_config import ExtensionsConfig
 from src.config.memory_config import load_memory_config_from_dict
 from src.config.model_config import ModelConfig
 from src.config.sandbox_config import SandboxConfig
+from src.config.scheduler_config import load_scheduler_config_from_dict, reset_scheduler_config
 from src.config.skills_config import SkillsConfig
 from src.config.subagents_config import load_subagents_config_from_dict
 from src.config.summarization_config import load_summarization_config_from_dict
@@ -97,6 +98,12 @@ class AppConfig(BaseModel):
         # Load checkpointer config if present
         if "checkpointer" in config_data:
             load_checkpointer_config_from_dict(config_data["checkpointer"])
+
+        # Load scheduler config if present
+        if "scheduler" in config_data:
+            load_scheduler_config_from_dict(config_data["scheduler"])
+        else:
+            reset_scheduler_config()
 
         # Load extensions config separately (it's in a different file)
         extensions_config = ExtensionsConfig.from_file()

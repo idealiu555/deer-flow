@@ -16,6 +16,11 @@ class ThreadDataState(TypedDict):
 class ThreadRuntimeContext(TypedDict):
     thread_id: NotRequired[str]
     sandbox_id: NotRequired[str]
+    channel_name: NotRequired[str]
+    chat_id: NotRequired[str]
+    user_id: NotRequired[str]
+    topic_id: NotRequired[str]
+    assistant_id: NotRequired[str]
 
 
 class ViewedImageData(TypedDict):

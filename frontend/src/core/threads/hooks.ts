@@ -1,4 +1,4 @@
-import type { AIMessage, Message } from "@langchain/langgraph-sdk";
+import type { AIMessage, Message, ThreadState } from "@langchain/langgraph-sdk";
 import type { ThreadsClient } from "@langchain/langgraph-sdk/client";
 import { useStream } from "@langchain/langgraph-sdk/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -87,11 +87,51 @@ export function useThreadStream({
 
   const queryClient = useQueryClient();
   const updateSubtask = useUpdateSubtask();
+  const apiClient = getAPIClient();
+  const activeThreadId = onStreamThreadId ?? null;
+
+  const threadHistory = useQuery<ThreadState<AgentThreadState>[]>({
+    queryKey: ["threads", "history", activeThreadId, 1],
+    queryFn: async () => {
+      if (!activeThreadId) {
+        return [];
+      }
+      return await apiClient.threads.getHistory<AgentThreadState>(
+        activeThreadId,
+        { limit: 1 },
+      );
+    },
+    enabled: activeThreadId != null,
+    refetchOnWindowFocus: false,
+    refetchInterval: activeThreadId ? 5000 : false,
+  });
+
+  const mutateThreadHistory = useCallback(
+    async (mutateId?: string) => {
+      const targetThreadId = mutateId ?? activeThreadId;
+      if (!targetThreadId) {
+        return [];
+      }
+      const data = await apiClient.threads.getHistory<AgentThreadState>(
+        targetThreadId,
+        { limit: 1 },
+      );
+      queryClient.setQueryData(["threads", "history", targetThreadId, 1], data);
+      return data;
+    },
+    [activeThreadId, apiClient, queryClient],
+  );
 
   const thread = useStream<AgentThreadState>({
-    client: getAPIClient(),
+    client: apiClient,
     assistantId: "lead_agent",
     threadId: onStreamThreadId,
+    thread: {
+      data: threadHistory.data,
+      error: threadHistory.error,
+      isLoading: threadHistory.isLoading,
+      mutate: mutateThreadHistory,
+    },
     reconnectOnMount: true,
     fetchStateHistory: { limit: 1 },
     onCreated(meta) {

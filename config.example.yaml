@@ -330,6 +330,23 @@ checkpointer:
 #   connection_string: postgresql://user:password@localhost:5432/deerflow
 
 # ============================================================================
+# Scheduler Configuration
+# ============================================================================
+# Built-in scheduler for recurring / one-time tasks.
+# Schedules are stored in SQLite and executed by Gateway background service.
+
+scheduler:
+  enabled: true
+  db_path: scheduler/scheduler.db
+  poll_interval_seconds: 15
+  max_concurrency: 3
+  lease_seconds: 60
+  draft_ttl_seconds: 86400
+  max_runs_per_schedule: 50
+  retry_attempts: 1
+  default_timezone: Asia/Shanghai
+
+# ============================================================================
 # IM Channels Configuration
 # ============================================================================
 # Connect DeerFlow to external messaging platforms.

@@ -551,6 +551,32 @@ class TestChannelManager:
 
         _run(go())
 
+    def test_resolve_run_params_preserves_metadata_configurable_overrides(self, tmp_path):
+        from src.channels.manager import ChannelManager
+
+        bus = MessageBus()
+        store = ChannelStore(path=tmp_path / "store.json")
+        manager = ChannelManager(
+            bus=bus,
+            store=store,
+            default_session={"config": {"configurable": {"model_name": "default-model"}}},
+            channel_sessions={"test": {"config": {"configurable": {"reasoning_effort": "low"}}}},
+        )
+
+        msg = InboundMessage(
+            channel_name="test",
+            chat_id="chat1",
+            user_id="user1",
+            text="hello",
+            metadata={"run_config": {"configurable": {"model_name": "meta-model", "subagent_enabled": True}}},
+        )
+
+        _assistant_id, run_config, _run_context = manager._resolve_run_params(msg, "thread-1")
+
+        assert run_config["configurable"]["model_name"] == "meta-model"
+        assert run_config["configurable"]["reasoning_effort"] == "low"
+        assert run_config["configurable"]["subagent_enabled"] is True
+
     def test_handle_command_help(self):
         from src.channels.manager import ChannelManager
 

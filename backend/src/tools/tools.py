@@ -5,12 +5,14 @@ from langchain.tools import BaseTool
 from src.config import get_app_config
 from src.reflection import resolve_variable
 from src.tools.builtins import ask_clarification_tool, present_file_tool, task_tool, view_image_tool
+from src.tools.builtins.schedule_tool import schedule_tool
 
 logger = logging.getLogger(__name__)
 
 BUILTIN_TOOLS = [
     present_file_tool,
     ask_clarification_tool,
+    schedule_tool,
 ]
 
 SUBAGENT_TOOLS = [

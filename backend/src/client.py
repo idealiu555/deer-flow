@@ -23,9 +23,12 @@ import os
 import re
 import shutil
 import tempfile
+import threading
 import uuid
 import zipfile
 from collections.abc import Generator
+from concurrent.futures import CancelledError as FutureCancelledError
+from concurrent.futures import Future
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -40,9 +43,35 @@ from src.agents.thread_state import ThreadState
 from src.config.app_config import get_app_config, reload_app_config
 from src.config.extensions_config import ExtensionsConfig, SkillStateConfig, get_extensions_config, reload_extensions_config
 from src.config.paths import get_paths
+from src.config.scheduler_config import SchedulerConfig, get_scheduler_config
 from src.models import create_chat_model
+from src.scheduler import derive_owner_identity, get_scheduler_store, start_scheduler_service, wake_running_scheduler_service_best_effort
 
 logger = logging.getLogger(__name__)
+
+_scheduler_wake_loop: asyncio.AbstractEventLoop | None = None
+_scheduler_wake_loop_lock = threading.Lock()
+
+
+def _get_scheduler_wake_loop() -> asyncio.AbstractEventLoop:
+    global _scheduler_wake_loop
+    with _scheduler_wake_loop_lock:
+        if _scheduler_wake_loop is not None and not _scheduler_wake_loop.is_closed():
+            return _scheduler_wake_loop
+
+        loop = asyncio.new_event_loop()
+        ready = threading.Event()
+
+        def _run_loop() -> None:
+            asyncio.set_event_loop(loop)
+            ready.set()
+            loop.run_forever()
+
+        thread = threading.Thread(target=_run_loop, name="deerflow-scheduler-wake-loop", daemon=True)
+        thread.start()
+        ready.wait()
+        _scheduler_wake_loop = loop
+        return loop
 
 
 @dataclass
@@ -226,6 +255,38 @@ class DeerFlowClient:
         from src.tools import get_available_tools
 
         return get_available_tools(model_name=model_name, subagent_enabled=subagent_enabled)
+
+    @staticmethod
+    def _get_scheduler_store():
+        cfg = get_scheduler_config() or SchedulerConfig()
+        return get_scheduler_store(cfg)
+
+    @staticmethod
+    def _wake_scheduler_best_effort() -> None:
+        async def _wake() -> None:
+            service = await start_scheduler_service()
+            service.wake()
+
+        def _log_wake_result(result_holder: Future[None] | asyncio.Task[None]) -> None:
+            try:
+                result_holder.result()
+            except (asyncio.CancelledError, FutureCancelledError):
+                pass
+            except Exception:
+                logger.exception("Failed to wake scheduler service")
+
+        if wake_running_scheduler_service_best_effort():
+            return
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            background_loop = _get_scheduler_wake_loop()
+            future = asyncio.run_coroutine_threadsafe(_wake(), background_loop)
+            future.add_done_callback(_log_wake_result)
+        else:
+            task = loop.create_task(_wake())
+            task.add_done_callback(_log_wake_result)
 
     @staticmethod
     def _serialize_message(msg) -> dict:
@@ -696,6 +757,82 @@ class DeerFlowClient:
             "config": self.get_memory_config(),
             "data": self.get_memory(),
         }
+
+    # ------------------------------------------------------------------
+    # Public API — schedule management
+    # ------------------------------------------------------------------
+
+    def list_schedules(
+        self,
+        *,
+        owner_key: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict:
+        store = self._get_scheduler_store()
+        schedules = store.list_schedules(owner_key=owner_key, status=status, limit=limit, offset=offset)
+        return {"schedules": schedules, "count": len(schedules)}
+
+    def create_schedule(
+        self,
+        *,
+        schedule: dict[str, Any],
+        owner_key: str = "web:client",
+        assistant_id: str | None = None,
+        config: dict[str, Any] | None = None,
+        context: dict[str, Any] | None = None,
+        channel_name: str | None = None,
+        chat_id: str | None = None,
+        topic_id: str | None = None,
+        thread_id: str | None = None,
+    ) -> dict:
+        store = self._get_scheduler_store()
+        owner_channel, owner_user = derive_owner_identity(owner_key)
+        created = store.create_schedule(
+            owner_key=owner_key,
+            owner_channel=owner_channel,
+            owner_user=owner_user,
+            channel_name=channel_name,
+            chat_id=chat_id,
+            topic_id=topic_id,
+            thread_id=thread_id,
+            assistant_id=assistant_id or "lead_agent",
+            payload=schedule,
+            config=config or {},
+            context=context or {},
+        )
+        self._wake_scheduler_best_effort()
+        return {"schedule": created}
+
+    def update_schedule_status(self, schedule_id: str, *, status: str, owner_key: str) -> dict:
+        store = self._get_scheduler_store()
+        updated = store.set_schedule_status(schedule_id=schedule_id, owner_key=owner_key, status=status)
+        if updated is None:
+            raise ValueError(f"Schedule '{schedule_id}' not found")
+        if status == "active":
+            self._wake_scheduler_best_effort()
+        return {"schedule": updated}
+
+    def delete_schedule(self, schedule_id: str, *, owner_key: str) -> dict:
+        store = self._get_scheduler_store()
+        deleted = store.delete_schedule(schedule_id=schedule_id, owner_key=owner_key)
+        if not deleted:
+            raise ValueError(f"Schedule '{schedule_id}' not found")
+        return {"success": True, "schedule_id": schedule_id}
+
+    def trigger_schedule(self, schedule_id: str, *, owner_key: str) -> dict:
+        store = self._get_scheduler_store()
+        queued = store.trigger_schedule(schedule_id=schedule_id, owner_key=owner_key)
+        if queued is None:
+            raise ValueError(f"Schedule '{schedule_id}' not found")
+        self._wake_scheduler_best_effort()
+        return {"schedule": queued}
+
+    def list_schedule_runs(self, schedule_id: str, *, owner_key: str, limit: int = 20) -> dict:
+        store = self._get_scheduler_store()
+        runs = store.list_runs(schedule_id=schedule_id, owner_key=owner_key, limit=limit)
+        return {"runs": runs, "count": len(runs)}
 
     # ------------------------------------------------------------------
     # Public API — file uploads
