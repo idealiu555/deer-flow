@@ -6,7 +6,7 @@ import json
 import tempfile
 import zipfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage  # noqa: F401
@@ -134,6 +134,79 @@ class TestConfigQueries:
             result = client.get_memory()
             mock_mem.assert_called_once()
         assert result == memory
+
+
+class TestScheduleApis:
+    def test_wake_scheduler_starts_service_before_wake(self):
+        service = MagicMock()
+        start_service = AsyncMock(return_value=service)
+        fake_loop = object()
+        real_asyncio_run = asyncio.run
+
+        def _run_threadsafe(coro, loop):
+            fut = concurrent.futures.Future()
+            try:
+                real_asyncio_run(coro)
+            except Exception as exc:  # pragma: no cover
+                fut.set_exception(exc)
+            else:
+                fut.set_result(None)
+            assert loop is fake_loop
+            return fut
+
+        with (
+            patch("deerflow.client.start_scheduler_service", new=start_service),
+            patch("deerflow.client.wake_running_scheduler_service_best_effort", return_value=False) as wake_running,
+            patch("deerflow.client._get_scheduler_wake_loop", return_value=fake_loop),
+            patch("asyncio.run_coroutine_threadsafe", side_effect=_run_threadsafe),
+            patch("asyncio.run") as mock_asyncio_run,
+        ):
+            DeerFlowClient._wake_scheduler_best_effort()
+
+        mock_asyncio_run.assert_not_called()
+        wake_running.assert_called_once_with()
+        start_service.assert_awaited_once()
+        service.wake.assert_called_once_with()
+
+    def test_wake_scheduler_uses_running_service_without_cross_loop_start(self):
+        with (
+            patch("deerflow.client.wake_running_scheduler_service_best_effort", return_value=True) as wake_running,
+            patch("deerflow.client._get_scheduler_wake_loop") as get_wake_loop,
+            patch("deerflow.client.start_scheduler_service", new=AsyncMock()) as start_service,
+            patch("asyncio.run_coroutine_threadsafe") as run_threadsafe,
+        ):
+            DeerFlowClient._wake_scheduler_best_effort()
+
+        wake_running.assert_called_once_with()
+        get_wake_loop.assert_not_called()
+        run_threadsafe.assert_not_called()
+        start_service.assert_not_awaited()
+
+    def test_create_schedule_derives_owner_user_from_owner_key(self, client):
+        schedule_store = MagicMock()
+        schedule_store.create_schedule.return_value = {"id": "sched-1"}
+
+        with (
+            patch.object(client, "_get_scheduler_store", return_value=schedule_store),
+            patch.object(client, "_wake_scheduler_best_effort"),
+        ):
+            result = client.create_schedule(
+                schedule={
+                    "title": "Daily",
+                    "prompt": "Do research",
+                    "kind": "cron",
+                    "cron": "0 9 * * *",
+                    "timezone": "Asia/Shanghai",
+                },
+                owner_key="web:user-123",
+                thread_id="thread-xyz",
+            )
+
+        assert result == {"schedule": {"id": "sched-1"}}
+        kwargs = schedule_store.create_schedule.call_args.kwargs
+        assert kwargs["owner_channel"] == "web"
+        assert kwargs["owner_user"] == "user-123"
+        assert kwargs["thread_id"] == "thread-xyz"
 
 
 # ---------------------------------------------------------------------------

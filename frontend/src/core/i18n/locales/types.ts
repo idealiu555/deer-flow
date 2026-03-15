@@ -217,7 +217,7 @@ export interface Translations {
       tools: string;
       skills: string;
       notification: string;
-      about: string;
+      schedules: string;
     };
     memory: {
       title: string;
@@ -287,6 +287,22 @@ export interface Translations {
       testBody: string;
       notSupported: string;
       disableNotification: string;
+    };
+    schedules: {
+      title: string;
+      description: string;
+      statusLabel: string;
+      createTitle: string;
+      namePlaceholder: string;
+      promptPlaceholder: string;
+      createButton: string;
+      runNow: string;
+      viewRuns: string;
+      hideRuns: string;
+      delete: string;
+      recentRuns: string;
+      noRuns: string;
+      empty: string;
     };
     acknowledge: {
       emptyTitle: string;

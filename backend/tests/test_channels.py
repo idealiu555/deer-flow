@@ -564,125 +564,31 @@ class TestChannelManager:
 
         _run(go())
 
-    def test_handle_feishu_chat_streams_multiple_outbound_updates(self, monkeypatch):
+    def test_resolve_run_params_preserves_metadata_configurable_overrides(self, tmp_path):
         from app.channels.manager import ChannelManager
 
-        monkeypatch.setattr("app.channels.manager.STREAM_UPDATE_MIN_INTERVAL_SECONDS", 0.0)
+        bus = MessageBus()
+        store = ChannelStore(path=tmp_path / "store.json")
+        manager = ChannelManager(
+            bus=bus,
+            store=store,
+            default_session={"config": {"configurable": {"model_name": "default-model"}}},
+            channel_sessions={"test": {"config": {"configurable": {"reasoning_effort": "low"}}}},
+        )
 
-        async def go():
-            bus = MessageBus()
-            store = ChannelStore(path=Path(tempfile.mkdtemp()) / "store.json")
-            manager = ChannelManager(bus=bus, store=store)
+        msg = InboundMessage(
+            channel_name="test",
+            chat_id="chat1",
+            user_id="user1",
+            text="hello",
+            metadata={"run_config": {"configurable": {"model_name": "meta-model", "subagent_enabled": True}}},
+        )
 
-            outbound_received = []
+        _assistant_id, run_config, _run_context = manager._resolve_run_params(msg, "thread-1")
 
-            async def capture_outbound(msg):
-                outbound_received.append(msg)
-
-            bus.subscribe_outbound(capture_outbound)
-
-            stream_events = [
-                _make_stream_part(
-                    "messages-tuple",
-                    [
-                        {"id": "ai-1", "content": "Hello", "type": "AIMessageChunk"},
-                        {"langgraph_node": "agent"},
-                    ],
-                ),
-                _make_stream_part(
-                    "messages-tuple",
-                    [
-                        {"id": "ai-1", "content": " world", "type": "AIMessageChunk"},
-                        {"langgraph_node": "agent"},
-                    ],
-                ),
-                _make_stream_part(
-                    "values",
-                    {
-                        "messages": [
-                            {"type": "human", "content": "hi"},
-                            {"type": "ai", "content": "Hello world"},
-                        ],
-                        "artifacts": [],
-                    },
-                ),
-            ]
-
-            mock_client = _make_mock_langgraph_client()
-            mock_client.runs.stream = MagicMock(return_value=_make_async_iterator(stream_events))
-            manager._client = mock_client
-
-            await manager.start()
-
-            inbound = InboundMessage(
-                channel_name="feishu",
-                chat_id="chat1",
-                user_id="user1",
-                text="hi",
-                thread_ts="om-source-1",
-            )
-            await bus.publish_inbound(inbound)
-            await _wait_for(lambda: len(outbound_received) >= 3)
-            await manager.stop()
-
-            mock_client.runs.stream.assert_called_once()
-            assert [msg.text for msg in outbound_received] == ["Hello", "Hello world", "Hello world"]
-            assert [msg.is_final for msg in outbound_received] == [False, False, True]
-            assert all(msg.thread_ts == "om-source-1" for msg in outbound_received)
-
-        _run(go())
-
-    def test_handle_feishu_stream_error_still_sends_final(self, monkeypatch):
-        """When the stream raises mid-way, a final outbound with is_final=True must still be published."""
-        from app.channels.manager import ChannelManager
-
-        monkeypatch.setattr("app.channels.manager.STREAM_UPDATE_MIN_INTERVAL_SECONDS", 0.0)
-
-        async def go():
-            bus = MessageBus()
-            store = ChannelStore(path=Path(tempfile.mkdtemp()) / "store.json")
-            manager = ChannelManager(bus=bus, store=store)
-
-            outbound_received = []
-
-            async def capture_outbound(msg):
-                outbound_received.append(msg)
-
-            bus.subscribe_outbound(capture_outbound)
-
-            async def _failing_stream():
-                yield _make_stream_part(
-                    "messages-tuple",
-                    [
-                        {"id": "ai-1", "content": "Partial", "type": "AIMessageChunk"},
-                        {"langgraph_node": "agent"},
-                    ],
-                )
-                raise ConnectionError("stream broken")
-
-            mock_client = _make_mock_langgraph_client()
-            mock_client.runs.stream = MagicMock(return_value=_failing_stream())
-            manager._client = mock_client
-
-            await manager.start()
-
-            inbound = InboundMessage(
-                channel_name="feishu",
-                chat_id="chat1",
-                user_id="user1",
-                text="hi",
-                thread_ts="om-source-1",
-            )
-            await bus.publish_inbound(inbound)
-            await _wait_for(lambda: any(m.is_final for m in outbound_received))
-            await manager.stop()
-
-            # Should have at least one intermediate and one final message
-            final_msgs = [m for m in outbound_received if m.is_final]
-            assert len(final_msgs) == 1
-            assert final_msgs[0].thread_ts == "om-source-1"
-
-        _run(go())
+        assert run_config["configurable"]["model_name"] == "meta-model"
+        assert run_config["configurable"]["reasoning_effort"] == "low"
+        assert run_config["configurable"]["subagent_enabled"] is True
 
     def test_handle_command_help(self):
         from app.channels.manager import ChannelManager

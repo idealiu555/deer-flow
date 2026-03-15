@@ -84,6 +84,9 @@ const ChatBox: React.FC<{ children: React.ReactNode; threadId: string }> = ({
     return artifactsOpen;
   }, [artifactsOpen, artifacts]);
 
+  const panelGroupId = `chat-panels-${threadId}`;
+  const panelHandleId = `chat-panels-separator-${threadId}`;
+
   useEffect(() => {
     if (layoutRef.current) {
       if (artifactPanelOpen) {
@@ -96,6 +99,7 @@ const ChatBox: React.FC<{ children: React.ReactNode; threadId: string }> = ({
 
   return (
     <ResizablePanelGroup
+      id={panelGroupId}
       orientation="horizontal"
       defaultLayout={{ chat: 100, artifacts: 0 }}
       groupRef={layoutRef}
@@ -104,6 +108,7 @@ const ChatBox: React.FC<{ children: React.ReactNode; threadId: string }> = ({
         {children}
       </ResizablePanel>
       <ResizableHandle
+        id={panelHandleId}
         className={cn(
           "opacity-33 hover:opacity-100",
           !artifactPanelOpen && "pointer-events-none opacity-0",

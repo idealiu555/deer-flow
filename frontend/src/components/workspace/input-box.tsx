@@ -69,7 +69,6 @@ import {
   ModelSelectorItem,
   ModelSelectorList,
   ModelSelectorName,
-  ModelSelectorTrigger,
 } from "../ai-elements/model-selector";
 import { Suggestion, Suggestions } from "../ai-elements/suggestion";
 import {
@@ -143,20 +142,10 @@ export function InputBox({
   const searchParams = useSearchParams();
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const { models } = useModels();
-  const { thread, isMock } = useThread();
-  const { textInput } = usePromptInputController();
-  const promptRootRef = useRef<HTMLDivElement | null>(null);
-
-  const [followups, setFollowups] = useState<string[]>([]);
-  const [followupsHidden, setFollowupsHidden] = useState(false);
-  const [followupsLoading, setFollowupsLoading] = useState(false);
-  const lastGeneratedForAiIdRef = useRef<string | null>(null);
-  const wasStreamingRef = useRef(false);
-
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [pendingSuggestion, setPendingSuggestion] = useState<string | null>(
-    null,
-  );
+  const modeTooltipTriggerId = `mode-menu-trigger-${threadId}`;
+  const modeMenuContentId = `mode-menu-content-${threadId}`;
+  const modelDialogTriggerId = `model-selector-trigger-${threadId}`;
+  const modelDialogContentId = `model-selector-content-${threadId}`;
 
   useEffect(() => {
     if (models.length === 0) {
@@ -417,6 +406,7 @@ export function InputBox({
           <AddAttachmentsButton className="px-2!" />
           <PromptInputActionMenu>
             <ModeHoverGuide
+              triggerId={modeTooltipTriggerId}
               mode={
                 context.mode === "flash" ||
                   context.mode === "thinking" ||
@@ -452,7 +442,10 @@ export function InputBox({
                 </div>
               </PromptInputActionMenuTrigger>
             </ModeHoverGuide>
-            <PromptInputActionMenuContent className="w-80">
+            <PromptInputActionMenuContent
+              id={modeMenuContentId}
+              className="w-80"
+            >
               <DropdownMenuGroup>
                 <DropdownMenuLabel className="text-muted-foreground text-xs">
                   {t.inputBox.mode}
@@ -697,19 +690,23 @@ export function InputBox({
         </PromptInputTools>
         <PromptInputTools>
           <ModelSelector
-            open={modelDialogOpen}
-            onOpenChange={setModelDialogOpen}
-          >
-            <ModelSelectorTrigger asChild>
-              <PromptInputButton>
+              open={modelDialogOpen}
+              onOpenChange={setModelDialogOpen}
+            >
+              <PromptInputButton
+                id={modelDialogTriggerId}
+                aria-haspopup="dialog"
+                aria-expanded={modelDialogOpen}
+                aria-controls={modelDialogContentId}
+                onClick={() => setModelDialogOpen(true)}
+              >
                 <ModelSelectorName className="text-xs font-normal">
                   {selectedModel?.display_name}
                 </ModelSelectorName>
               </PromptInputButton>
-            </ModelSelectorTrigger>
-            <ModelSelectorContent>
-              <ModelSelectorInput placeholder={t.inputBox.searchModels} />
-              <ModelSelectorList>
+              <ModelSelectorContent id={modelDialogContentId}>
+                <ModelSelectorInput placeholder={t.inputBox.searchModels} />
+                <ModelSelectorList>
                 {models.map((m) => (
                   <ModelSelectorItem
                     key={m.name}
@@ -737,7 +734,7 @@ export function InputBox({
       </PromptInputFooter>
       {isNewThread && searchParams.get("mode") !== "skill" && (
         <div className="absolute right-0 -bottom-20 left-0 z-0 flex items-center justify-center">
-          <SuggestionList />
+          <SuggestionList threadId={threadId} />
         </div>
       )}
       {!isNewThread && (
@@ -805,9 +802,11 @@ export function InputBox({
   );
 }
 
-function SuggestionList() {
+function SuggestionList({ threadId }: { threadId: string }) {
   const { t } = useI18n();
   const { textInput } = usePromptInputController();
+  const createMenuTriggerId = `suggestion-create-trigger-${threadId}`;
+  const createMenuContentId = `suggestion-create-content-${threadId}`;
   const handleSuggestionClick = useCallback(
     (prompt: string | undefined) => {
       if (!prompt) return;
@@ -847,10 +846,14 @@ function SuggestionList() {
         />
       ))}
       <DropdownMenu>
-        <DropdownMenuTrigger asChild>
+        <DropdownMenuTrigger
+          id={createMenuTriggerId}
+          aria-controls={createMenuContentId}
+          asChild
+        >
           <Suggestion icon={PlusIcon} suggestion={t.common.create} />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
+        <DropdownMenuContent id={createMenuContentId} align="start">
           <DropdownMenuGroup>
             {t.inputBox.suggestionsCreate.map((suggestion, index) =>
               "type" in suggestion && suggestion.type === "separator" ? (

@@ -4,6 +4,7 @@ import {
   BellIcon,
   InfoIcon,
   BrainIcon,
+  Clock3Icon,
   PaletteIcon,
   SparklesIcon,
   WrenchIcon,
@@ -21,6 +22,7 @@ import { AboutSettingsPage } from "@/components/workspace/settings/about-setting
 import { AppearanceSettingsPage } from "@/components/workspace/settings/appearance-settings-page";
 import { MemorySettingsPage } from "@/components/workspace/settings/memory-settings-page";
 import { NotificationSettingsPage } from "@/components/workspace/settings/notification-settings-page";
+import { ScheduleSettingsPage } from "@/components/workspace/settings/schedule-settings-page";
 import { SkillSettingsPage } from "@/components/workspace/settings/skill-settings-page";
 import { ToolSettingsPage } from "@/components/workspace/settings/tool-settings-page";
 import { useI18n } from "@/core/i18n/hooks";
@@ -32,7 +34,7 @@ type SettingsSection =
   | "tools"
   | "skills"
   | "notification"
-  | "about";
+  | "schedules";
 
 type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
   defaultSection?: SettingsSection;
@@ -65,6 +67,11 @@ export function SettingsDialog(props: SettingsDialogProps) {
         icon: BellIcon,
       },
       {
+        id: "schedules",
+        label: t.settings.sections.schedules,
+        icon: Clock3Icon,
+      },
+      {
         id: "memory",
         label: t.settings.sections.memory,
         icon: BrainIcon,
@@ -79,7 +86,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
       t.settings.sections.tools,
       t.settings.sections.skills,
       t.settings.sections.notification,
-      t.settings.sections.about,
+      t.settings.sections.schedules,
     ],
   );
   return (
@@ -133,7 +140,7 @@ export function SettingsDialog(props: SettingsDialogProps) {
                 />
               )}
               {activeSection === "notification" && <NotificationSettingsPage />}
-              {activeSection === "about" && <AboutSettingsPage />}
+              {activeSection === "schedules" && <ScheduleSettingsPage />}
             </div>
           </ScrollArea>
         </div>

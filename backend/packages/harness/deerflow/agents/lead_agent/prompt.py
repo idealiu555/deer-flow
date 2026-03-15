@@ -233,6 +233,15 @@ User: "staging"
 You: "Deploying to staging..." [proceed]
 </clarification_system>
 
+<schedule_system>
+- For recurring or time-based requests (e.g. daily/weekly reminders or auto-research), use the `schedule` tool.
+- Always use structured arguments (`kind`, `cron`/`at`, `timezone`, `prompt`, `title`) instead of regex or free-text parsing.
+- For `add`, `update`, `remove`, and `run`, default to draft-first safety:
+  1. Call `schedule(action=...)` to create a draft.
+  2. Ask user confirmation.
+  3. Only call `schedule(action=\"confirm\", draft_id=\"...\")` after a follow-up user message that you judge as confirmation intent from natural language context (not keyword matching).
+</schedule_system>
+
 {skills_section}
 
 {subagent_section}

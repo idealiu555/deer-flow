@@ -12,6 +12,7 @@ from deerflow.config.extensions_config import ExtensionsConfig
 from deerflow.config.memory_config import load_memory_config_from_dict
 from deerflow.config.model_config import ModelConfig
 from deerflow.config.sandbox_config import SandboxConfig
+from deerflow.config.scheduler_config import load_scheduler_config_from_dict, reset_scheduler_config
 from deerflow.config.skills_config import SkillsConfig
 from deerflow.config.subagents_config import load_subagents_config_from_dict
 from deerflow.config.summarization_config import load_summarization_config_from_dict
@@ -104,6 +105,12 @@ class AppConfig(BaseModel):
         # Load checkpointer config if present
         if "checkpointer" in config_data:
             load_checkpointer_config_from_dict(config_data["checkpointer"])
+
+        # Load scheduler config if present
+        if "scheduler" in config_data:
+            load_scheduler_config_from_dict(config_data["scheduler"])
+        else:
+            reset_scheduler_config()
 
         # Load extensions config separately (it's in a different file)
         extensions_config = ExtensionsConfig.from_file()
