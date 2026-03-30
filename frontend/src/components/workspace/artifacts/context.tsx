@@ -55,6 +55,14 @@ export function ArtifactsProvider({ children }: ArtifactsProviderProps) {
     setOpen(false);
   }, []);
 
+  const handleSetOpen = useCallback((isOpen: boolean) => {
+    if (!isOpen && autoOpen) {
+      setAutoOpen(false);
+      setAutoSelect(false);
+    }
+    setOpen(isOpen);
+  }, [autoOpen]);
+
   const value: ArtifactsContextType = {
     artifacts,
     setArtifacts,
@@ -62,13 +70,7 @@ export function ArtifactsProvider({ children }: ArtifactsProviderProps) {
     open,
     autoOpen,
     autoSelect,
-    setOpen: (isOpen: boolean) => {
-      if (!isOpen && autoOpen) {
-        setAutoOpen(false);
-        setAutoSelect(false);
-      }
-      setOpen(isOpen);
-    },
+    setOpen: handleSetOpen,
 
     selectedArtifact,
     select,

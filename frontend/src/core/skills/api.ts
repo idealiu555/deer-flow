@@ -2,13 +2,25 @@ import { getBackendBaseURL } from "@/core/config";
 
 import type { Skill } from "./type";
 
-export async function loadSkills() {
-  const skills = await fetch(`${getBackendBaseURL()}/api/skills`);
-  const json = await skills.json();
-  return json.skills as Skill[];
+export async function loadSkills(): Promise<Skill[]> {
+  try {
+    const response = await fetch(`${getBackendBaseURL()}/api/skills`);
+    if (!response.ok) {
+      console.error(`Failed to load skills: HTTP ${response.status}`);
+      return [];
+    }
+    const json = await response.json();
+    return json.skills as Skill[];
+  } catch (error) {
+    console.error("Failed to load skills:", error);
+    return [];
+  }
 }
 
-export async function enableSkill(skillName: string, enabled: boolean) {
+export async function enableSkill(
+  skillName: string,
+  enabled: boolean,
+): Promise<{ enabled: boolean }> {
   const response = await fetch(
     `${getBackendBaseURL()}/api/skills/${skillName}`,
     {
@@ -16,11 +28,12 @@ export async function enableSkill(skillName: string, enabled: boolean) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        enabled,
-      }),
+      body: JSON.stringify({ enabled }),
     },
   );
+  if (!response.ok) {
+    throw new Error(`Failed to enable skill: HTTP ${response.status}`);
+  }
   return response.json();
 }
 

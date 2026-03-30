@@ -137,12 +137,6 @@ tools:
   #   # Used to limit the scope of search results, only returns content within the specified time range. Set to -1 to disable time filtering
   #   search_time_range: 10
 
-  # Web fetch tool (uses Jina AI reader)
-  - name: web_fetch
-    group: web
-    use: src.community.jina_ai.tools:web_fetch_tool
-    timeout: 10
-
   # Web fetch tool (uses InfoQuest AI reader)
   # - name: web_fetch
   #   group: web

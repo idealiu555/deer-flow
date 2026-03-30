@@ -49,14 +49,6 @@ const ChatBox: React.FC<{ children: React.ReactNode; threadId: string }> = ({
     // Update artifacts from the current thread
     setArtifacts(thread.values.artifacts);
 
-    // DO NOT automatically deselect the artifact when switching threads, because the artifacts auto discovering is not work now.
-    // if (
-    //   selectedArtifact &&
-    //   !thread.values.artifacts?.includes(selectedArtifact)
-    // ) {
-    //   deselect();
-    // }
-
     if (autoSelectFirstArtifact) {
       if (thread?.values?.artifacts?.length > 0) {
         setAutoSelectFirstArtifact(false);
