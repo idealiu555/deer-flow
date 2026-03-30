@@ -1,7 +1,6 @@
 """Configuration for LangGraph checkpointer."""
 
-from typing import Literal
-from typing import cast
+from typing import Literal, cast
 
 from pydantic import BaseModel, Field
 

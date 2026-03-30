@@ -78,6 +78,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         logger.exception("Failed to stop scheduler service")
 
+    # Shutdown subagent thread pools
+    try:
+        from src.subagents.executor import shutdown_subagent_pools
+
+        shutdown_subagent_pools(wait=True)
+    except Exception:
+        logger.exception("Failed to shutdown subagent pools")
+
     # Stop channel service on shutdown
     try:
         from src.channels.service import stop_channel_service

@@ -1,5 +1,6 @@
 """Middleware for intercepting clarification requests and presenting them to the user."""
 
+import logging
 from collections.abc import Callable
 from typing import override
 
@@ -10,14 +11,10 @@ from langgraph.graph import END
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
-
-class ClarificationMiddlewareState(AgentState):
-    """Compatible with the `ThreadState` schema."""
-
-    pass
+logger = logging.getLogger(__name__)
 
 
-class ClarificationMiddleware(AgentMiddleware[ClarificationMiddlewareState]):
+class ClarificationMiddleware(AgentMiddleware[AgentState]):
     """Intercepts clarification tool calls and interrupts execution to present questions to the user.
 
     When the model calls the `ask_clarification` tool, this middleware:
@@ -30,7 +27,7 @@ class ClarificationMiddleware(AgentMiddleware[ClarificationMiddlewareState]):
     This replaces the tool-based approach where clarification continued the conversation flow.
     """
 
-    state_schema = ClarificationMiddlewareState
+    state_schema = AgentState
 
     def _is_chinese(self, text: str) -> bool:
         """Check if text contains Chinese characters.
@@ -101,8 +98,7 @@ class ClarificationMiddleware(AgentMiddleware[ClarificationMiddlewareState]):
         args = request.tool_call.get("args", {})
         question = args.get("question", "")
 
-        print("[ClarificationMiddleware] Intercepted clarification request")
-        print(f"[ClarificationMiddleware] Question: {question}")
+        logger.debug("[ClarificationMiddleware] Intercepted clarification request: %s", question)
 
         # Format the clarification message
         formatted_message = self._format_clarification_message(args)

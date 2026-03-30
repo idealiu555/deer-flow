@@ -217,14 +217,16 @@ def _resolve_attachments(thread_id: str, artifacts: list[str]) -> list[ResolvedA
                 continue
             mime, _ = mimetypes.guess_type(str(actual))
             mime = mime or "application/octet-stream"
-            attachments.append(ResolvedAttachment(
-                virtual_path=virtual_path,
-                actual_path=actual,
-                filename=actual.name,
-                mime_type=mime,
-                size=actual.stat().st_size,
-                is_image=mime.startswith("image/"),
-            ))
+            attachments.append(
+                ResolvedAttachment(
+                    virtual_path=virtual_path,
+                    actual_path=actual,
+                    filename=actual.name,
+                    mime_type=mime,
+                    size=actual.stat().st_size,
+                    is_image=mime.startswith("image/"),
+                )
+            )
         except (ValueError, OSError) as exc:
             logger.warning("[Manager] failed to resolve artifact %s: %s", virtual_path, exc)
     return attachments
@@ -374,14 +376,7 @@ class ChannelManager:
         metadata_run_config = _as_dict(metadata.get("run_config"))
         metadata_run_context = _as_dict(metadata.get("run_context"))
 
-        assistant_id = (
-            metadata.get("assistant_id")
-            or runtime_user_layer.get("assistant_id")
-            or user_layer.get("assistant_id")
-            or channel_layer.get("assistant_id")
-            or self._default_session.get("assistant_id")
-            or self._assistant_id
-        )
+        assistant_id = metadata.get("assistant_id") or runtime_user_layer.get("assistant_id") or user_layer.get("assistant_id") or channel_layer.get("assistant_id") or self._default_session.get("assistant_id") or self._assistant_id
         if not isinstance(assistant_id, str) or not assistant_id.strip():
             assistant_id = self._assistant_id
 

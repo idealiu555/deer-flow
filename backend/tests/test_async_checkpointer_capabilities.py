@@ -29,12 +29,7 @@ async def test_adelete_thread_removes_all_checkpoints_and_writes_for_thread(tmp_
 
         await checkpointer.adelete_thread("thread-delete")
 
-        remaining = [
-            item
-            async for item in checkpointer.alist(
-                {"configurable": {"thread_id": "thread-delete", "checkpoint_ns": ""}}
-            )
-        ]
+        remaining = [item async for item in checkpointer.alist({"configurable": {"thread_id": "thread-delete", "checkpoint_ns": ""}})]
 
         assert remaining == []
 
@@ -70,12 +65,7 @@ async def test_adelete_for_runs_removes_matching_checkpoints_and_writes(tmp_path
 
         await checkpointer.adelete_for_runs(["run-a"])
 
-        remaining = [
-            item
-            async for item in checkpointer.alist(
-                {"configurable": {"thread_id": "thread-a", "checkpoint_ns": ""}}
-            )
-        ]
+        remaining = [item async for item in checkpointer.alist({"configurable": {"thread_id": "thread-a", "checkpoint_ns": ""}})]
 
         assert [item.metadata.get("run_id") for item in remaining] == ["run-b"]
 
@@ -101,9 +91,7 @@ async def test_acopy_thread_copies_checkpoints_and_rewrites_metadata_thread_id(t
 
         await checkpointer.acopy_thread("source-thread", "target-thread")
 
-        copied = await checkpointer.aget_tuple(
-            {"configurable": {"thread_id": "target-thread", "checkpoint_ns": ""}}
-        )
+        copied = await checkpointer.aget_tuple({"configurable": {"thread_id": "target-thread", "checkpoint_ns": ""}})
 
         assert copied is not None
         assert copied.metadata["thread_id"] == "target-thread"
@@ -150,18 +138,11 @@ async def test_acopy_thread_replaces_existing_target_history(tmp_path):
 
         await checkpointer.acopy_thread("source-thread", "target-thread")
 
-        copied_rows = [
-            item
-            async for item in checkpointer.alist(
-                {"configurable": {"thread_id": "target-thread", "checkpoint_ns": ""}}
-            )
-        ]
+        copied_rows = [item async for item in checkpointer.alist({"configurable": {"thread_id": "target-thread", "checkpoint_ns": ""}})]
 
         assert len(copied_rows) == 1
         assert copied_rows[0].metadata["run_id"] == "run-source"
-        assert copied_rows[0].pending_writes == [
-            ("task-source", "messages", {"value": "source"})
-        ]
+        assert copied_rows[0].pending_writes == [("task-source", "messages", {"value": "source"})]
 
 
 @pytest.mark.anyio
@@ -193,12 +174,7 @@ async def test_aprune_keep_latest_keeps_only_latest_checkpoint_per_namespace(tmp
 
         await checkpointer.aprune(["thread-prune"], strategy="keep_latest")
 
-        remaining = [
-            item
-            async for item in checkpointer.alist(
-                {"configurable": {"thread_id": "thread-prune", "checkpoint_ns": ""}}
-            )
-        ]
+        remaining = [item async for item in checkpointer.alist({"configurable": {"thread_id": "thread-prune", "checkpoint_ns": ""}})]
 
         assert len(remaining) == 1
         assert remaining[0].metadata["run_id"] == "run-2"

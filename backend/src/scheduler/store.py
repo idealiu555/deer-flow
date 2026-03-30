@@ -712,9 +712,7 @@ CREATE INDEX IF NOT EXISTS idx_schedule_drafts_owner ON schedule_drafts(owner_ke
             return []
 
         with self._lock, self._connect() as conn:
-            sql = "SELECT * FROM schedules WHERE id IN ({})".format(
-                ",".join("?" for _ in claimed_ids)
-            )
+            sql = "SELECT * FROM schedules WHERE id IN ({})".format(",".join("?" for _ in claimed_ids))
             rows = conn.execute(sql, tuple(claimed_ids)).fetchall()
             by_id = {row["id"]: self._row_to_schedule(row) for row in rows}
             return [by_id[sid] for sid in claimed_ids if sid in by_id]

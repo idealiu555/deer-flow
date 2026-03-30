@@ -379,6 +379,7 @@ def test_set_schedule_status_paused_preserves_active_lease_until_release(tmp_pat
     assert released["run_now_pending"] is False
     assert released["last_error"] == "boom"
 
+
 def test_renew_schedule_lease_extends_expiration_for_same_owner(tmp_path: Path) -> None:
     store = _make_store(tmp_path)
     created = store.create_schedule(

@@ -55,9 +55,7 @@ class EnhancedAsyncSqliteSaver:
 
         await self._saver.setup()
         async with self._saver.lock, self._saver.conn.cursor() as cur:
-            await cur.execute(
-                "SELECT thread_id, checkpoint_ns, checkpoint_id, metadata FROM checkpoints"
-            )
+            await cur.execute("SELECT thread_id, checkpoint_ns, checkpoint_id, metadata FROM checkpoints")
             rows_to_delete: list[tuple[str, str, str]] = []
             async for thread_id, checkpoint_ns, checkpoint_id, metadata in cur:
                 if not metadata:
@@ -67,9 +65,7 @@ class EnhancedAsyncSqliteSaver:
                 except (TypeError, json.JSONDecodeError):
                     continue
                 if str(parsed_metadata.get("run_id", "")) in run_ids:
-                    rows_to_delete.append(
-                        (str(thread_id), str(checkpoint_ns), str(checkpoint_id))
-                    )
+                    rows_to_delete.append((str(thread_id), str(checkpoint_ns), str(checkpoint_id)))
 
             if not rows_to_delete:
                 return
@@ -170,20 +166,13 @@ class EnhancedAsyncSqliteSaver:
                     """,
                     (thread_id,),
                 )
-                keep_rows = {
-                    (thread_id, str(checkpoint_ns), str(checkpoint_id))
-                    for checkpoint_ns, checkpoint_id in await cur.fetchall()
-                }
+                keep_rows = {(thread_id, str(checkpoint_ns), str(checkpoint_id)) for checkpoint_ns, checkpoint_id in await cur.fetchall()}
 
                 await cur.execute(
                     "SELECT thread_id, checkpoint_ns, checkpoint_id FROM checkpoints WHERE thread_id = ?",
                     (thread_id,),
                 )
-                rows_to_delete = [
-                    (str(tid), str(ns), str(cid))
-                    for tid, ns, cid in await cur.fetchall()
-                    if (str(tid), str(ns), str(cid)) not in keep_rows
-                ]
+                rows_to_delete = [(str(tid), str(ns), str(cid)) for tid, ns, cid in await cur.fetchall() if (str(tid), str(ns), str(cid)) not in keep_rows]
                 if rows_to_delete:
                     await cur.executemany(
                         "DELETE FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
@@ -204,6 +193,7 @@ class EnhancedAsyncSqliteSaver:
                     )
 
             await self._saver.conn.commit()
+
 
 # ---------------------------------------------------------------------------
 # Async factory

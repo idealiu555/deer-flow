@@ -575,6 +575,7 @@ def test_update_always_creates_draft_even_when_confirmed_true(tmp_path, monkeypa
     assert unchanged is not None
     assert unchanged["title"] == "Daily"
 
+
 def test_list_rejects_non_integer_limit(monkeypatch) -> None:
     class _ListStore:
         def list_schedules(self, **kwargs):  # noqa: ANN003 - test stub

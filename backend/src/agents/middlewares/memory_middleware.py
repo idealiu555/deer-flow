@@ -1,23 +1,18 @@
 """Middleware for memory mechanism."""
 
 import logging
-import re
+from copy import copy
 from typing import Any, override
 
 from langchain.agents import AgentState
 from langchain.agents.middleware import AgentMiddleware
 from langgraph.runtime import Runtime
 
+from src.agents.memory.constants import UPLOAD_BLOCK_RE
 from src.agents.memory.queue import get_memory_queue
 from src.config.memory_config import get_memory_config
 
 logger = logging.getLogger(__name__)
-
-
-class MemoryMiddlewareState(AgentState):
-    """Compatible with the `ThreadState` schema."""
-
-    pass
 
 
 def _filter_messages_for_memory(messages: list[Any]) -> list[Any]:
@@ -43,8 +38,6 @@ def _filter_messages_for_memory(messages: list[Any]) -> list[Any]:
     Returns:
         Filtered list containing only user inputs and final assistant responses.
     """
-    _UPLOAD_BLOCK_RE = re.compile(r"<uploaded_files>[\s\S]*?</uploaded_files>\n*", re.IGNORECASE)
-
     filtered = []
     skip_next_ai = False
     for msg in messages:
@@ -57,7 +50,7 @@ def _filter_messages_for_memory(messages: list[Any]) -> list[Any]:
             content_str = str(content)
             if "<uploaded_files>" in content_str:
                 # Strip the ephemeral upload block; keep the user's real question.
-                stripped = _UPLOAD_BLOCK_RE.sub("", content_str).strip()
+                stripped = UPLOAD_BLOCK_RE.sub("", content_str).strip()
                 if not stripped:
                     # Nothing left — the entire turn was upload bookkeeping;
                     # skip it and the paired assistant response.
@@ -65,8 +58,6 @@ def _filter_messages_for_memory(messages: list[Any]) -> list[Any]:
                     continue
                 # Rebuild the message with cleaned content so the user's question
                 # is still available for memory summarisation.
-                from copy import copy
-
                 clean_msg = copy(msg)
                 clean_msg.content = stripped
                 filtered.append(clean_msg)
@@ -86,7 +77,7 @@ def _filter_messages_for_memory(messages: list[Any]) -> list[Any]:
     return filtered
 
 
-class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
+class MemoryMiddleware(AgentMiddleware[AgentState]):
     """Middleware that queues conversation for memory update after agent execution.
 
     This middleware:
@@ -96,14 +87,14 @@ class MemoryMiddleware(AgentMiddleware[MemoryMiddlewareState]):
     4. Memory is updated asynchronously via LLM summarization
     """
 
-    state_schema = MemoryMiddlewareState
+    state_schema = AgentState
 
     def __init__(self):
         """Initialize the MemoryMiddleware."""
         super().__init__()
 
     @override
-    def after_agent(self, state: MemoryMiddlewareState, runtime: Runtime) -> dict | None:
+    def after_agent(self, state: AgentState, runtime: Runtime) -> dict | None:
         """Queue conversation for memory update after agent completes.
 
         Args:

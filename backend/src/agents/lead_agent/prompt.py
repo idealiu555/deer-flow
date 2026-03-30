@@ -288,6 +288,7 @@ Recent breakthroughs in language models have also accelerated progress
 </critical_reminders>
 """
 
+
 def get_skills_prompt_section(available_skills: set[str] | None = None) -> str:
     """Generate the skills prompt section with available skills list.
 

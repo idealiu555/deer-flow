@@ -19,6 +19,7 @@ from langchain_core.runnables import RunnableConfig
 from src.agents.thread_state import SandboxState, ThreadDataState, ThreadState
 from src.models import create_chat_model
 from src.subagents.config import SubagentConfig
+from src.subagents.constants import MAX_CONCURRENT_SUBAGENTS
 
 logger = logging.getLogger(__name__)
 
@@ -67,12 +68,10 @@ class SubagentResult:
 _background_tasks: dict[str, SubagentResult] = {}
 _background_tasks_lock = threading.Lock()
 
-# Thread pool for background task scheduling and orchestration
-_scheduler_pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="subagent-scheduler-")
-
-# Thread pool for actual subagent execution (with timeout support)
-# Larger pool to avoid blocking when scheduler submits execution tasks
-_execution_pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix="subagent-exec-")
+# Thread pools for subagent orchestration and execution
+# Both pools use 3 workers to match MAX_CONCURRENT_SUBAGENTS limit
+_scheduler_pool = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_SUBAGENTS, thread_name_prefix="subagent-scheduler-")
+_execution_pool = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_SUBAGENTS, thread_name_prefix="subagent-exec-")
 
 
 def _filter_tools(
@@ -423,7 +422,19 @@ class SubagentExecutor:
         return task_id
 
 
-MAX_CONCURRENT_SUBAGENTS = 3
+def shutdown_subagent_pools(wait: bool = True) -> None:
+    """Shutdown the subagent thread pools.
+
+    Should be called during application shutdown to release resources.
+
+    Args:
+        wait: If True, wait for pending tasks to complete before shutdown.
+              If False, cancel pending tasks immediately.
+    """
+    logger.info("Shutting down subagent thread pools (wait=%s)", wait)
+    _scheduler_pool.shutdown(wait=wait)
+    _execution_pool.shutdown(wait=wait)
+    logger.info("Subagent thread pools shutdown complete")
 
 
 def get_background_task_result(task_id: str) -> SubagentResult | None:
