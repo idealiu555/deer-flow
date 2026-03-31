@@ -621,7 +621,7 @@ function SuggestionList({ threadId }: { threadId: string }) {
   return (
     <Suggestions className="min-h-16 w-fit items-start">
       <button
-        className="text-muted-foreground cursor-pointer rounded-full border px-4 text-xs font-normal"
+        className="text-muted-foreground inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border px-4 text-xs font-normal"
         onClick={() => handleSuggestionClick(t.inputBox.surpriseMePrompt)}
       >
         <SparklesIcon className="size-4" /> {t.inputBox.surpriseMe}
