@@ -6,8 +6,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
-import { AuroraText } from "../ui/aurora-text";
-
 export function Welcome({
   className,
   mode,
@@ -19,12 +17,6 @@ export function Welcome({
   const searchParams = useSearchParams();
   const [waved, setWaved] = useState(false);
   const isUltra = useMemo(() => mode === "ultra", [mode]);
-  const colors = useMemo(() => {
-    if (isUltra) {
-      return ["#efefbb", "#e9c665", "#e3a812"];
-    }
-    return ["var(--color-foreground)"];
-  }, [isUltra]);
   useEffect(() => {
     setWaved(true);
   }, []);
@@ -43,7 +35,7 @@ export function Welcome({
             <div className={cn("inline-block", !waved ? "animate-wave" : "")}>
               {isUltra ? "🚀" : "👋"}
             </div>
-            <AuroraText colors={colors}>{t.welcome.greeting}</AuroraText>
+            <span>{t.welcome.greeting}</span>
           </div>
         )}
       </div>

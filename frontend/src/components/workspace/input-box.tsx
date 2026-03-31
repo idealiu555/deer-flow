@@ -32,7 +32,6 @@ import {
   usePromptInputController,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
-import { ConfettiButton } from "@/components/ui/confetti-button";
 import {
   DropdownMenuGroup,
   DropdownMenuLabel,
@@ -621,14 +620,12 @@ function SuggestionList({ threadId }: { threadId: string }) {
   );
   return (
     <Suggestions className="min-h-16 w-fit items-start">
-      <ConfettiButton
-        className="text-muted-foreground cursor-pointer rounded-full px-4 text-xs font-normal"
-        variant="outline"
-        size="sm"
+      <button
+        className="text-muted-foreground cursor-pointer rounded-full border px-4 text-xs font-normal"
         onClick={() => handleSuggestionClick(t.inputBox.surpriseMePrompt)}
       >
         <SparklesIcon className="size-4" /> {t.inputBox.surpriseMe}
-      </ConfettiButton>
+      </button>
       {t.inputBox.suggestions.map((suggestion) => (
         <Suggestion
           key={suggestion.suggestion}
