@@ -1,6 +1,6 @@
 # DeerFlow - Unified Development Environment
 
-.PHONY: help config check install dev dev-daemon start stop clean docker-init docker-start docker-stop docker-logs docker-logs-frontend docker-logs-gateway
+.PHONY: help config check install dev dev-daemon start stop clean docker-init docker-start docker-stop docker-logs docker-logs-frontend docker-logs-gateway prod-build prod-up prod-down prod-logs prod-ps
 
 help:
 	@echo "DeerFlow Development Commands:"
@@ -20,6 +20,14 @@ help:
 	@echo "  make docker-logs     - View Docker development logs"
 	@echo "  make docker-logs-frontend - View Docker frontend logs"
 	@echo "  make docker-logs-gateway - View Docker gateway logs"
+	@echo ""
+	@echo "Docker Production Commands:"
+	@echo "  make prod-check      - Check required production config files"
+	@echo "  make prod-build      - Build production Docker images"
+	@echo "  make prod-up         - Start production Docker services (localhost:2026)"
+	@echo "  make prod-down       - Stop production Docker services"
+	@echo "  make prod-logs       - View production Docker logs"
+	@echo "  make prod-ps         - Show production container status"
 
 config:
 	@if [ -f config.yaml ] || [ -f config.yml ] || [ -f configure.yml ]; then \
@@ -101,3 +109,50 @@ docker-logs-frontend:
 	@./scripts/docker.sh logs --frontend
 docker-logs-gateway:
 	@./scripts/docker.sh logs --gateway
+
+# ==========================================
+# Docker Production Commands
+# ==========================================
+
+# Check production configuration files
+prod-check:
+	@echo "Checking production configuration..."
+	@if [ ! -f config.yaml ]; then \
+		echo "Error: config.yaml not found. Copy from config.example.yaml"; \
+		exit 1; \
+	fi
+	@if [ ! -f .env.prod ]; then \
+		echo "Error: .env.prod not found. Copy from .env.prod.example"; \
+		exit 1; \
+	fi
+	@echo "✓ Production configuration files ready"
+
+# Build production Docker images
+prod-build:
+	@echo "Building production Docker images..."
+	@cd docker && docker compose -f docker-compose-prod.yaml build
+	@echo "✓ Production images built"
+
+# Start production Docker services
+prod-up:
+	@$(MAKE) prod-check
+	@echo "Starting production Docker services..."
+	@cd docker && docker compose -f docker-compose-prod.yaml up -d
+	@echo "Waiting for services to be healthy..."
+	@sleep 10
+	@curl -sf http://localhost:2026/health > /dev/null 2>&1 && echo "✓ Services healthy" || echo "⚠ Services may still be starting..."
+	@echo "✓ Production services started at http://localhost:2026"
+
+# Stop production Docker services
+prod-down:
+	@echo "Stopping production Docker services..."
+	@cd docker && docker compose -f docker-compose-prod.yaml down
+	@echo "✓ Production services stopped"
+
+# View production Docker logs
+prod-logs:
+	@cd docker && docker compose -f docker-compose-prod.yaml logs -f
+
+# Show production container status
+prod-ps:
+	@cd docker && docker compose -f docker-compose-prod.yaml ps

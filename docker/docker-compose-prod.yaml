@@ -1,0 +1,185 @@
+# DeerFlow Production Environment
+# Usage: docker compose -f docker/docker-compose-prod.yaml up -d
+#
+# Services:
+#   - nginx: Reverse proxy (port 2026)
+#   - frontend: Frontend Next.js production server (port 3000)
+#   - gateway: Backend Gateway API (port 8001)
+#   - langgraph: LangGraph server (port 2024)
+#
+# Access: http://localhost:2026
+# Data persistence: deer-flow-prod-data volume
+
+services:
+  # ── Reverse Proxy ──────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: deer-flow-nginx-prod
+    ports:
+      - "${NGINX_PORT:-2026}:2026"
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      frontend:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+      langgraph:
+        condition: service_started
+    networks:
+      - deer-flow-prod
+    restart: always
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
+  # ── Frontend - Next.js Production Server ───────────────────────────────
+  frontend:
+    build:
+      context: ../
+      dockerfile: frontend/Dockerfile.prod
+      args:
+        SKIP_ENV_VALIDATION: 1
+    image: deer-flow-frontend:${VERSION:-latest}
+    container_name: deer-flow-frontend-prod
+    environment:
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@admin.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+    networks:
+      - deer-flow-prod
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # ── Backend - Gateway API ──────────────────────────────────────────────
+  gateway:
+    build:
+      context: ../
+      dockerfile: backend/Dockerfile.prod
+      args:
+        INCLUDE_DOCKER_CLI: ${INCLUDE_DOCKER_CLI:-false}
+    image: deer-flow-backend:${VERSION:-latest}
+    container_name: deer-flow-gateway-prod
+    command:
+      - /app/backend/.venv/bin/uvicorn
+      - src.gateway.app:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8001"
+    volumes:
+      # Configuration files (read-only)
+      - ../config.yaml:/app/config.yaml:ro
+      - ../extensions_config.json:/app/extensions_config.json:ro
+      # Skills directory (read-only)
+      - ../skills:/app/skills:ro
+      # Data persistence - CRITICAL: all state stored here
+      - deer-flow-data:/app/backend/.deer-flow
+      # Environment file for langgraph.json "env" directive
+      - ../.env.prod:/app/backend/.env:ro
+      # Optional: Docker socket for DooD sandbox mode
+      # Uncomment if INCLUDE_DOCKER_CLI=true and you need sandbox container spawning
+      # - ${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    environment:
+      - DEER_FLOW_CONFIG_PATH=/app/config.yaml
+      - DEER_FLOW_EXTENSIONS_CONFIG_PATH=/app/extensions_config.json
+      - PYTHONPATH=/app/backend
+    networks:
+      - deer-flow-prod
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # ── Backend - LangGraph Server ─────────────────────────────────────────
+  langgraph:
+    image: deer-flow-backend:${VERSION:-latest}
+    container_name: deer-flow-langgraph-prod
+    command:
+      - /app/backend/.venv/bin/langgraph
+      - up
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "2024"
+    volumes:
+      # Configuration files (read-only)
+      - ../config.yaml:/app/config.yaml:ro
+      - ../extensions_config.json:/app/extensions_config.json:ro
+      # Skills directory (read-only)
+      - ../skills:/app/skills:ro
+      # Data persistence - shared with gateway for checkpoint access
+      - deer-flow-data:/app/backend/.deer-flow
+      # Environment file for langgraph.json "env" directive
+      - ../.env.prod:/app/backend/.env:ro
+    environment:
+      - DEER_FLOW_CONFIG_PATH=/app/config.yaml
+      - DEER_FLOW_EXTENSIONS_CONFIG_PATH=/app/extensions_config.json
+      - PYTHONPATH=/app/backend
+    networks:
+      - deer-flow-prod
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2024/info"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+# ── Volumes - Data Persistence ──────────────────────────────────────────
+# Backend data volume:
+# - checkpoints.db: LangGraph conversation state
+# - memory.json: User memory system
+# - threads/*/user-data: Thread workspaces, uploads, outputs
+# - channels/store.json: IM channel mappings
+# - scheduler/scheduler.db: Scheduled tasks
+volumes:
+  deer-flow-data:
+    name: deer-flow-prod-data
+    driver: local
+
+# ── Networks ─────────────────────────────────────────────────────────────
+networks:
+  deer-flow-prod:
+    name: deer-flow-prod-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
