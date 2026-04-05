@@ -22,7 +22,15 @@ let cachedSecretKey: Buffer | null = null;
 
 const getSecretKey = (): Buffer => {
   if (cachedSecretKey) return cachedSecretKey;
-  const secret = process.env.BETTER_AUTH_SECRET || "deer-flow-default-secret-key";
+  const secret = process.env.BETTER_AUTH_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("BETTER_AUTH_SECRET must be set in production");
+    }
+    const devSecret = "deer-flow-default-secret-key";
+    cachedSecretKey = crypto.createHash("sha256").update(devSecret).digest();
+    return cachedSecretKey;
+  }
   cachedSecretKey = crypto.createHash("sha256").update(secret).digest();
   return cachedSecretKey;
 };

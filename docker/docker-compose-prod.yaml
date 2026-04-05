@@ -55,8 +55,11 @@ services:
       - NEXT_TELEMETRY_DISABLED=1
       - PORT=3000
       - HOSTNAME=0.0.0.0
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set in .env.prod}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@admin.com}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+    env_file:
+      - ../.env.prod
     networks:
       - deer-flow-prod
     restart: always
@@ -106,6 +109,8 @@ services:
       - DEER_FLOW_CONFIG_PATH=/app/config.yaml
       - DEER_FLOW_EXTENSIONS_CONFIG_PATH=/app/extensions_config.json
       - PYTHONPATH=/app/backend
+    env_file:
+      - ../.env.prod
     networks:
       - deer-flow-prod
     restart: always
@@ -128,7 +133,10 @@ services:
     container_name: deer-flow-langgraph-prod
     command:
       - /app/backend/.venv/bin/langgraph
-      - up
+      - dev
+      - --no-browser
+      - --allow-blocking
+      - --no-reload
       - --host
       - "0.0.0.0"
       - --port
@@ -147,6 +155,8 @@ services:
       - DEER_FLOW_CONFIG_PATH=/app/config.yaml
       - DEER_FLOW_EXTENSIONS_CONFIG_PATH=/app/extensions_config.json
       - PYTHONPATH=/app/backend
+    env_file:
+      - ../.env.prod
     networks:
       - deer-flow-prod
     restart: always

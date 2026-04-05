@@ -50,3 +50,4 @@ sandbox_image_cache.tar
 web/
 AGENTS.md
 docs/
+.env.prod

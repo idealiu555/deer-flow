@@ -29,8 +29,10 @@ WORKDIR /app
 # ============================================
 FROM base AS builder
 
-# Copy dependency definition files
-COPY backend/pyproject.toml backend/uv.lock* ./backend/
+# Copy backend project files needed to install the project itself.
+# `uv sync` installs the local package, so packaging metadata and source must
+# exist in the build context instead of only the lockfile.
+COPY backend ./backend/
 
 # Install production dependencies only (no dev dependencies)
 # Uses cache mount for faster rebuilds
@@ -64,6 +66,8 @@ COPY --from=builder /app/backend/.venv /app/backend/.venv
 # Copy application source code
 COPY backend/src ./backend/src
 COPY backend/langgraph.json ./backend/
+COPY backend/pyproject.toml ./backend/
+COPY backend/README.md ./backend/
 
 # Create data directory for persistent storage
 RUN mkdir -p /app/backend/.deer-flow

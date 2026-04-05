@@ -48,8 +48,6 @@ services:
       - NODE_ENV=development
       - WATCHPACK_POLLING=true
       - CI=true
-    env_file:
-      - ../frontend/.env
     networks:
       - deer-flow-dev
     restart: unless-stopped

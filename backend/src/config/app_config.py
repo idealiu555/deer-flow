@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 from typing import Any, Self
 
@@ -19,6 +20,38 @@ from src.config.title_config import load_title_config_from_dict
 from src.config.tool_config import ToolConfig, ToolGroupConfig
 
 load_dotenv()
+
+_ENV_DEFAULT_PATTERN = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}$")
+
+
+def _resolve_env_value(value: str) -> str:
+    """Resolve supported environment placeholder syntaxes.
+
+    Supported forms:
+    - `$VAR`: strict lookup, raises when missing
+    - `${VAR}`: strict lookup, raises when missing
+    - `${VAR:-default}`: lookup with fallback default (default may be empty)
+    """
+    if not value.startswith("$"):
+        return value
+
+    if value.startswith("${"):
+        match = _ENV_DEFAULT_PATTERN.match(value)
+        if match is None:
+            raise ValueError(f"Invalid environment variable placeholder: {value}")
+        env_name, default_value = match.groups()
+        env_value = os.getenv(env_name)
+        if env_value is not None:
+            return env_value
+        if default_value is not None:
+            return default_value
+        raise ValueError(f"Environment variable {env_name} not found for config value {value}")
+
+    env_name = value[1:]
+    env_value = os.getenv(env_name)
+    if env_value is None:
+        raise ValueError(f"Environment variable {env_name} not found for config value {value}")
+    return env_value
 
 
 class AppConfig(BaseModel):
@@ -125,12 +158,7 @@ class AppConfig(BaseModel):
             The config with environment variables resolved.
         """
         if isinstance(config, str):
-            if config.startswith("$"):
-                env_value = os.getenv(config[1:])
-                if env_value is None:
-                    raise ValueError(f"Environment variable {config[1:]} not found for config value {config}")
-                return env_value
-            return config
+            return _resolve_env_value(config)
         elif isinstance(config, dict):
             return {k: cls.resolve_env_variables(v) for k, v in config.items()}
         elif isinstance(config, list):
