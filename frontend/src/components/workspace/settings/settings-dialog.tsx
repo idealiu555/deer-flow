@@ -4,7 +4,6 @@ import {
   BellIcon,
   BrainIcon,
   Clock3Icon,
-  PaletteIcon,
   SparklesIcon,
   WrenchIcon,
 } from "lucide-react";
@@ -17,7 +16,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AppearanceSettingsPage } from "@/components/workspace/settings/appearance-settings-page";
 import { MemorySettingsPage } from "@/components/workspace/settings/memory-settings-page";
 import { NotificationSettingsPage } from "@/components/workspace/settings/notification-settings-page";
 import { ScheduleSettingsPage } from "@/components/workspace/settings/schedule-settings-page";
@@ -27,7 +25,6 @@ import { useI18n } from "@/core/i18n/hooks";
 import { cn } from "@/lib/utils";
 
 type SettingsSection =
-  | "appearance"
   | "memory"
   | "tools"
   | "skills"
@@ -39,7 +36,7 @@ type SettingsDialogProps = React.ComponentProps<typeof Dialog> & {
 };
 
 export function SettingsDialog(props: SettingsDialogProps) {
-  const { defaultSection = "appearance", ...dialogProps } = props;
+  const { defaultSection = "notification", ...dialogProps } = props;
   const { t } = useI18n();
   const [activeSection, setActiveSection] =
     useState<SettingsSection>(defaultSection);
@@ -53,11 +50,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
 
   const sections = useMemo(
     () => [
-      {
-        id: "appearance",
-        label: t.settings.sections.appearance,
-        icon: PaletteIcon,
-      },
       {
         id: "notification",
         label: t.settings.sections.notification,
@@ -77,7 +69,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
       { id: "skills", label: t.settings.sections.skills, icon: SparklesIcon },
     ],
     [
-      t.settings.sections.appearance,
       t.settings.sections.memory,
       t.settings.sections.tools,
       t.settings.sections.skills,
@@ -127,7 +118,6 @@ export function SettingsDialog(props: SettingsDialogProps) {
           </nav>
           <ScrollArea className="h-full min-h-0 rounded-lg border">
             <div className="space-y-8 p-6">
-              {activeSection === "appearance" && <AppearanceSettingsPage />}
               {activeSection === "memory" && <MemorySettingsPage />}
               {activeSection === "tools" && <ToolSettingsPage />}
               {activeSection === "skills" && (

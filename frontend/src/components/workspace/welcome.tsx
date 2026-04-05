@@ -11,12 +11,12 @@ export function Welcome({
   mode,
 }: {
   className?: string;
-  mode?: "ultra" | "pro" | "thinking" | "flash";
+  mode?: "common" | "pro";
 }) {
   const { t } = useI18n();
   const searchParams = useSearchParams();
   const [waved, setWaved] = useState(false);
-  const isUltra = useMemo(() => mode === "ultra", [mode]);
+  const isPro = useMemo(() => mode === "pro", [mode]);
   useEffect(() => {
     setWaved(true);
   }, []);
@@ -33,7 +33,7 @@ export function Welcome({
         ) : (
           <div className="flex items-center gap-2">
             <div className={cn("inline-block", !waved ? "animate-wave" : "")}>
-              {isUltra ? "🚀" : "👋"}
+              {isPro ? "🚀" : "👋"}
             </div>
             <span>{t.welcome.greeting}</span>
           </div>

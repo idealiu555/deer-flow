@@ -169,7 +169,8 @@ def test_thinking_disabled_openai_gateway_format(monkeypatch):
 
     factory_module.create_chat_model(name="openai-gw", thinking_enabled=False)
 
-    assert captured.get("extra_body") == {"thinking": {"type": "disabled"}}
+    assert captured.get("extra_body") is None
+    assert captured.get("model_kwargs", {}).get("extra_body") == {"thinking": {"type": "disabled"}}
     assert captured.get("reasoning_effort") == "minimal"
     assert "thinking" not in captured  # must NOT set the direct thinking param
 

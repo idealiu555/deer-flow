@@ -70,15 +70,11 @@ export const zhCN: Translations = {
       "我们一起用 skill-creator 技能来创建一个技能吧。先问问我希望这个技能能做什么。",
     addAttachments: "添加附件",
     mode: "模式",
-    flashMode: "闪速",
-    flashModeDescription: "快速且高效的完成任务，但可能不够精准",
-    reasoningMode: "思考",
-    reasoningModeDescription: "思考后再行动，在时间与准确性之间取得平衡",
+    commonMode: "Common",
+    commonModeDescription: "思考、计划再执行，获得更精准的结果，适合大多数任务",
     proMode: "Pro",
-    proModeDescription: "思考、计划再执行，获得更精准的结果，可能需要更多时间",
-    ultraMode: "Ultra",
-    ultraModeDescription:
-      "继承自 Pro 模式，可调用子代理分工协作，适合复杂多步骤任务，能力最强",
+    proModeDescription:
+      "继承自 Common 模式，可调用子代理分工协作，适合复杂多步骤任务，能力最强",
     reasoningEffort: "推理深度",
     reasoningEffortMinimal: "最低",
     reasoningEffortMinimalDescription: "检索 + 直接输出",
@@ -89,8 +85,6 @@ export const zhCN: Translations = {
     reasoningEffortHigh: "高",
     reasoningEffortHighDescription: "全维度逻辑推演 + 多路径验证 + 反推校验",
     searchModels: "搜索模型...",
-    surpriseMe: "小惊喜",
-    surpriseMePrompt: "给我一个小惊喜吧",
     suggestions: [
       {
         suggestion: "写作",
@@ -219,7 +213,6 @@ export const zhCN: Translations = {
     title: "设置",
     description: "根据你的偏好调整 DeerFlow 的界面和行为。",
     sections: {
-      appearance: "外观",
       memory: "记忆",
       tools: "工具",
       skills: "技能",
@@ -260,18 +253,6 @@ export const zhCN: Translations = {
           view: "查看",
         },
       },
-    },
-    appearance: {
-      themeTitle: "主题",
-      themeDescription: "跟随系统或选择固定的界面模式。",
-      system: "系统",
-      light: "浅色",
-      dark: "深色",
-      systemDescription: "自动跟随系统主题。",
-      lightDescription: "更明亮的配色，适合日间使用。",
-      darkDescription: "更暗的配色，减少眩光方便专注。",
-      languageTitle: "语言",
-      languageDescription: "在不同语言之间切换。",
     },
     tools: {
       title: "工具",

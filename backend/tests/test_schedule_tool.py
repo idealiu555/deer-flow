@@ -48,6 +48,30 @@ def test_draft_requires_schedule_id_for_non_add_actions(action: str, monkeypatch
     assert dummy_store.create_draft_called is False
 
 
+@pytest.mark.parametrize("action", ["update", "remove", "run", "runs"])
+def test_non_add_actions_require_existing_schedule(action: str, tmp_path, monkeypatch) -> None:
+    store = SchedulerStore(SchedulerConfig(db_path=str(tmp_path / f"schedule_tool_missing_{action}.db")))
+
+    monkeypatch.setattr(schedule_tool_module, "get_scheduler_store", lambda _cfg: store)
+
+    runtime = SimpleNamespace(context={"thread_id": "thread-test"}, config={})
+
+    payload = asyncio.run(
+        schedule_tool_module.schedule_tool.coroutine(
+            runtime=runtime,
+            action=action,
+            schedule_id="missing",
+            confirmed=False,
+            schedule={"kind": "one_time"} if action == "update" else None,
+        )
+    )
+    parsed = json.loads(payload)
+
+    assert parsed["success"] is False
+    assert parsed["action"] == action
+    assert parsed["error"] == "Schedule not found"
+
+
 def test_add_persists_json_safe_runtime_snapshot(tmp_path, monkeypatch) -> None:
     store = SchedulerStore(SchedulerConfig(db_path=str(tmp_path / "schedule_tool.db")))
 
@@ -86,6 +110,7 @@ def test_add_persists_json_safe_runtime_snapshot(tmp_path, monkeypatch) -> None:
     add_result = json.loads(add_raw)
     assert add_result["success"] is True
     assert "draft" in add_result
+    assert add_result["draft_id"] == add_result["draft"]["id"]
     draft_id = add_result["draft"]["id"]
 
     confirm_raw = asyncio.run(
@@ -107,6 +132,158 @@ def test_add_persists_json_safe_runtime_snapshot(tmp_path, monkeypatch) -> None:
     assert created["context"]["thinking_enabled"] is True
     assert created["context"]["reasoning_effort"] == "high"
     assert "callbacks" not in created["config"]
+    assert store.get_draft(owner_key="web:settings", draft_id=draft_id) is None
+
+
+def test_add_normalizes_one_time_kind_alias_before_confirm(tmp_path, monkeypatch) -> None:
+    store = SchedulerStore(SchedulerConfig(db_path=str(tmp_path / "schedule_tool_kind_alias.db")))
+
+    monkeypatch.setattr(schedule_tool_module, "get_scheduler_store", lambda _cfg: store)
+    monkeypatch.setattr(schedule_tool_module, "wake_running_scheduler_service_best_effort", lambda: True)
+
+    runtime = SimpleNamespace(
+        context={"thread_id": "thread-test", "assistant_id": "lead_agent"},
+        config={},
+    )
+
+    add_raw = asyncio.run(
+        schedule_tool_module.schedule_tool.coroutine(
+            runtime=runtime,
+            action="add",
+            schedule={
+                "title": "北京天气查询",
+                "prompt": "查询北京今天的天气",
+                "kind": "one_time",
+                "at": "2099-01-01T09:00:00",
+                "timezone": "Asia/Shanghai",
+            },
+        )
+    )
+    add_result = json.loads(add_raw)
+    assert add_result["success"] is True
+    assert add_result["draft"]["payload"]["schedule"]["kind"] == "once"
+
+    confirm_raw = asyncio.run(
+        schedule_tool_module.schedule_tool.coroutine(
+            runtime=runtime,
+            action="confirm",
+            draft_id=add_result["draft_id"],
+            confirmed=True,
+        )
+    )
+    confirm_result = json.loads(confirm_raw)
+    assert confirm_result["success"] is True
+    assert confirm_result["schedule"]["kind"] == "once"
+
+
+def test_update_normalizes_kind_alias_before_confirm(tmp_path, monkeypatch) -> None:
+    store = SchedulerStore(SchedulerConfig(db_path=str(tmp_path / "schedule_tool_update_kind_alias.db")))
+
+    monkeypatch.setattr(schedule_tool_module, "get_scheduler_store", lambda _cfg: store)
+    monkeypatch.setattr(schedule_tool_module, "wake_running_scheduler_service_best_effort", lambda: True)
+
+    created = store.create_schedule(
+        owner_key="web:settings",
+        owner_channel="web",
+        owner_user="settings",
+        channel_name=None,
+        chat_id=None,
+        topic_id=None,
+        thread_id="thread-test",
+        assistant_id="lead_agent",
+        payload={
+            "title": "Daily",
+            "prompt": "Do research",
+            "kind": "cron",
+            "cron": "0 9 * * *",
+            "timezone": "Asia/Shanghai",
+        },
+        config={},
+        context={},
+    )
+
+    update_runtime = SimpleNamespace(
+        context={"thread_id": "thread-test", "assistant_id": "lead_agent"},
+        config={},
+        state={"messages": [HumanMessage(id="msg-1", content="改成一次性任务")]},
+    )
+
+    update_raw = asyncio.run(
+        schedule_tool_module.schedule_tool.coroutine(
+            runtime=update_runtime,
+            action="update",
+            schedule_id=created["id"],
+            schedule={
+                "kind": "one_time",
+                "at": "2099-01-01T09:00:00",
+                "timezone": "Asia/Shanghai",
+            },
+        )
+    )
+    update_result = json.loads(update_raw)
+    assert update_result["success"] is True
+    assert update_result["draft"]["payload"]["kind"] == "once"
+
+    confirm_runtime = SimpleNamespace(
+        context={"thread_id": "thread-test", "assistant_id": "lead_agent"},
+        config={},
+        state={"messages": [HumanMessage(id="msg-1", content="改成一次性任务"), HumanMessage(id="msg-2", content="确认")]},
+    )
+    confirm_raw = asyncio.run(
+        schedule_tool_module.schedule_tool.coroutine(
+            runtime=confirm_runtime,
+            action="confirm",
+            draft_id=update_result["draft_id"],
+            confirmed=True,
+        )
+    )
+    confirm_result = json.loads(confirm_raw)
+    assert confirm_result["success"] is True
+    assert confirm_result["schedule"]["kind"] == "once"
+
+
+def test_confirm_failure_keeps_draft_for_retry(tmp_path, monkeypatch) -> None:
+    store = SchedulerStore(SchedulerConfig(db_path=str(tmp_path / "schedule_tool_confirm_retry.db")))
+
+    monkeypatch.setattr(schedule_tool_module, "get_scheduler_store", lambda _cfg: store)
+    monkeypatch.setattr(schedule_tool_module, "wake_running_scheduler_service_best_effort", lambda: True)
+
+    draft = store.create_draft(
+        owner_key="web:settings",
+        action="add",
+        payload={
+            "schedule": {
+                "title": "Broken draft",
+                "prompt": "Do research",
+                "kind": "not-a-kind",
+                "at": "2099-01-01T09:00:00",
+                "timezone": "Asia/Shanghai",
+            },
+            "meta": {
+                "thread_id": "thread-test",
+                "assistant_id": "lead_agent",
+            },
+        },
+    )
+
+    runtime = SimpleNamespace(
+        context={"thread_id": "thread-test", "assistant_id": "lead_agent"},
+        config={},
+    )
+
+    confirm_raw = asyncio.run(
+        schedule_tool_module.schedule_tool.coroutine(
+            runtime=runtime,
+            action="confirm",
+            draft_id=draft["id"],
+            confirmed=True,
+        )
+    )
+    confirm_result = json.loads(confirm_raw)
+    assert confirm_result["success"] is False
+    assert confirm_result["draft_id"] == draft["id"]
+    assert "schedule.kind" in confirm_result["error"]
+    assert store.get_draft(owner_key="web:settings", draft_id=draft["id"]) is not None
 
 
 def test_add_succeeds_when_no_running_scheduler_service(tmp_path, monkeypatch) -> None:
@@ -267,6 +444,7 @@ def test_confirm_add_preserves_empty_drafted_runtime_snapshot(tmp_path, monkeypa
     )
     draft_result = json.loads(draft_raw)
     assert draft_result["success"] is True
+    assert draft_result["draft_id"] == draft_result["draft"]["id"]
     draft_id = draft_result["draft"]["id"]
 
     confirm_runtime = SimpleNamespace(
@@ -368,6 +546,130 @@ def test_confirm_requires_follow_up_user_confirmation_message(tmp_path, monkeypa
     assert confirm_result["success"] is True
     assert confirm_result["confirmed_action"] == "add"
     assert wake_calls == 1
+
+
+def test_confirm_auto_resolves_single_eligible_draft(tmp_path, monkeypatch) -> None:
+    store = SchedulerStore(SchedulerConfig(db_path=str(tmp_path / "schedule_tool_auto_confirm.db")))
+    wake_calls = 0
+
+    class _FakeService:
+        _running = True
+
+        def wake(self) -> None:
+            nonlocal wake_calls
+            wake_calls += 1
+
+    async def _fake_start_service():
+        return _FakeService()
+
+    monkeypatch.setattr(schedule_tool_module, "get_scheduler_store", lambda _cfg: store)
+    monkeypatch.setattr(schedule_tool_module, "wake_running_scheduler_service_best_effort", lambda: False)
+    monkeypatch.setattr(schedule_tool_module, "start_scheduler_service", _fake_start_service)
+
+    initial_message = HumanMessage(id="msg-1", content="今天 14:21 帮我查北京天气")
+    add_runtime = SimpleNamespace(
+        context={"thread_id": "thread-test", "assistant_id": "lead_agent"},
+        config={},
+        state={"messages": [initial_message]},
+    )
+    draft_raw = asyncio.run(
+        schedule_tool_module.schedule_tool.coroutine(
+            runtime=add_runtime,
+            action="add",
+            schedule={
+                "title": "查询北京天气",
+                "prompt": "请查询北京今天的天气情况。",
+                "kind": "once",
+                "at": "2099-04-05 14:21:00",
+                "timezone": "Asia/Shanghai",
+            },
+        )
+    )
+    draft_result = json.loads(draft_raw)
+    assert draft_result["success"] is True
+    assert draft_result["draft_id"] == draft_result["draft"]["id"]
+
+    confirm_runtime = SimpleNamespace(
+        context={"thread_id": "thread-test", "assistant_id": "lead_agent"},
+        config={},
+        state={"messages": [initial_message, HumanMessage(id="msg-2", content="确认")]},
+    )
+    confirm_raw = asyncio.run(
+        schedule_tool_module.schedule_tool.coroutine(
+            runtime=confirm_runtime,
+            action="confirm",
+        )
+    )
+    confirm_result = json.loads(confirm_raw)
+    assert confirm_result["success"] is True
+    assert confirm_result["confirmed_action"] == "add"
+    assert wake_calls == 1
+
+
+def test_confirm_without_draft_id_rejects_ambiguous_candidates(tmp_path, monkeypatch) -> None:
+    store = SchedulerStore(SchedulerConfig(db_path=str(tmp_path / "schedule_tool_auto_confirm_ambiguous.db")))
+
+    monkeypatch.setattr(schedule_tool_module, "get_scheduler_store", lambda _cfg: store)
+    monkeypatch.setattr(schedule_tool_module, "wake_running_scheduler_service_best_effort", lambda: False)
+
+    async def _fake_start_service():
+        raise AssertionError("scheduler should not start for ambiguous confirmation")
+
+    monkeypatch.setattr(schedule_tool_module, "start_scheduler_service", _fake_start_service)
+
+    follow_up = HumanMessage(id="msg-3", content="确认")
+    runtime = SimpleNamespace(
+        context={"thread_id": "thread-test", "assistant_id": "lead_agent"},
+        config={},
+        state={"messages": [HumanMessage(id="msg-1", content="第一条"), HumanMessage(id="msg-2", content="第二条"), follow_up]},
+    )
+
+    store.create_draft(
+        owner_key="web:settings",
+        action="add",
+        payload={
+            "schedule": {
+                "title": "A",
+                "prompt": "Do A",
+                "kind": "cron",
+                "cron": "0 9 * * *",
+                "timezone": "Asia/Shanghai",
+            },
+            "meta": {
+                "thread_id": "thread-test",
+                "origin_user_message_id": "msg-1",
+                "origin_user_message_count": 1,
+            },
+        },
+    )
+    store.create_draft(
+        owner_key="web:settings",
+        action="add",
+        payload={
+            "schedule": {
+                "title": "B",
+                "prompt": "Do B",
+                "kind": "cron",
+                "cron": "0 10 * * *",
+                "timezone": "Asia/Shanghai",
+            },
+            "meta": {
+                "thread_id": "thread-test",
+                "origin_user_message_id": "msg-2",
+                "origin_user_message_count": 2,
+            },
+        },
+    )
+
+    confirm_raw = asyncio.run(
+        schedule_tool_module.schedule_tool.coroutine(
+            runtime=runtime,
+            action="confirm",
+        )
+    )
+    confirm_result = json.loads(confirm_raw)
+    assert confirm_result["success"] is False
+    assert confirm_result["error"] == "Multiple pending drafts match this confirmation; draft_id is required"
 
 
 def test_confirm_accepts_any_follow_up_message_when_model_calls_confirm(tmp_path, monkeypatch) -> None:

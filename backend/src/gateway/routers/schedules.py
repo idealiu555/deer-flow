@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field, StringConstraints
 
 from src.config.scheduler_config import SchedulerConfig, get_scheduler_config
-from src.scheduler import SchedulerValidationError, derive_owner_identity, get_scheduler_service, get_scheduler_store, start_scheduler_service
-from src.scheduler.draft_actions import SchedulerDraftActionError, execute_confirmed_draft
+from src.scheduler import (
+    SchedulerValidationError,
+    get_scheduler_service,
+    get_scheduler_store,
+    start_scheduler_service,
+    wake_running_scheduler_service_best_effort,
+)
+from src.scheduler.draft_actions import SchedulerDraftActionError, execute_confirmed_draft, normalize_add_schedule_payload
 
 router = APIRouter(prefix="/api/schedules", tags=["schedules"])
 logger = logging.getLogger(__name__)
@@ -75,6 +82,84 @@ def _store():
     return get_scheduler_store(get_scheduler_config() or SchedulerConfig())
 
 
+def _draft_response(draft: Mapping[str, Any]) -> ApiResponse:
+    return ApiResponse(
+        success=True,
+        message="Draft created",
+        data={"confirmed": False, "requires_confirmation": True, "draft_id": draft["id"], "draft": dict(draft)},
+    )
+
+
+def _result_data(result: Mapping[str, Any]) -> dict[str, Any]:
+    data: dict[str, Any] = {"action": result["action"]}
+    if "schedule" in result:
+        data["schedule"] = result["schedule"]
+    if "schedule_id" in result:
+        data["schedule_id"] = result["schedule_id"]
+    return data
+
+
+def _execute_schedule_action(
+    *,
+    store,
+    draft: Mapping[str, Any],
+    fallback_meta: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    try:
+        return execute_confirmed_draft(store=store, draft=draft, fallback_meta=fallback_meta)
+    except SchedulerValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except SchedulerDraftActionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+def _build_add_draft(
+    *,
+    store,
+    owner_key: str,
+    payload: Mapping[str, Any],
+    channel_name: str | None,
+    chat_id: str | None,
+    topic_id: str | None,
+    thread_id: str | None,
+    assistant_id: str,
+    config: Mapping[str, Any],
+    context: Mapping[str, Any],
+) -> dict[str, Any]:
+    canonical_payload = normalize_add_schedule_payload(store, payload)
+    return {
+        "owner_key": owner_key,
+        "action": "add",
+        "payload": {
+            "schedule": canonical_payload,
+            "meta": {
+                "channel_name": channel_name,
+                "chat_id": chat_id,
+                "topic_id": topic_id,
+                "thread_id": thread_id,
+                "assistant_id": assistant_id,
+                "config": dict(config),
+                "context": dict(context),
+            },
+        },
+    }
+
+
+def _build_existing_schedule_action(
+    *,
+    owner_key: str,
+    schedule_id: str,
+    action: Literal["update", "remove", "run"],
+    payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "owner_key": owner_key,
+        "action": action,
+        "schedule_id": schedule_id,
+        "payload": dict(payload),
+    }
+
+
 def _create_draft_for_existing_schedule(
     *,
     store,
@@ -104,6 +189,8 @@ def _set_schedule_status(
 
 
 async def _wake_scheduler() -> None:
+    if wake_running_scheduler_service_best_effort():
+        return
     try:
         service = await start_scheduler_service()
     except Exception:
@@ -136,47 +223,28 @@ async def get_scheduler_status() -> ApiResponse:
 async def create_schedule(request: ScheduleCreateRequest) -> ApiResponse:
     store = _store()
     owner_key = request.owner_key
-    owner_channel, owner_user = derive_owner_identity(owner_key)
     payload = request.schedule.model_dump(exclude_none=True)
+    draft_payload = _build_add_draft(
+        store=store,
+        owner_key=owner_key,
+        payload=payload,
+        channel_name=request.channel_name,
+        chat_id=request.chat_id,
+        topic_id=request.topic_id,
+        thread_id=request.thread_id,
+        assistant_id=request.assistant_id,
+        config=request.config,
+        context=request.context,
+    )
 
     if not request.confirmed:
-        draft = store.create_draft(
-            owner_key=owner_key,
-            action="add",
-            payload={
-                "schedule": payload,
-                "meta": {
-                    "channel_name": request.channel_name,
-                    "chat_id": request.chat_id,
-                    "topic_id": request.topic_id,
-                    "thread_id": request.thread_id,
-                    "assistant_id": request.assistant_id,
-                    "config": request.config,
-                    "context": request.context,
-                },
-            },
-        )
-        return ApiResponse(success=True, message="Draft created", data={"draft": draft})
+        draft = store.create_draft(owner_key=owner_key, action="add", payload=draft_payload["payload"])
+        return _draft_response(draft)
 
-    try:
-        created = store.create_schedule(
-            owner_key=owner_key,
-            owner_channel=owner_channel,
-            owner_user=owner_user,
-            channel_name=request.channel_name,
-            chat_id=request.chat_id,
-            topic_id=request.topic_id,
-            thread_id=request.thread_id,
-            assistant_id=request.assistant_id,
-            payload=payload,
-            config=request.config,
-            context=request.context,
-        )
-    except SchedulerValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    await _wake_scheduler()
-    return ApiResponse(success=True, message="Schedule created", data={"schedule": created})
+    result = _execute_schedule_action(store=store, draft=draft_payload)
+    if bool(result.get("wake")):
+        await _wake_scheduler()
+    return ApiResponse(success=True, message="Schedule created", data={"confirmed": True, **_result_data(result)})
 
 
 @router.patch("/{schedule_id}", response_model=ApiResponse)
@@ -196,18 +264,15 @@ async def update_schedule(schedule_id: str, request: SchedulePatchRequest) -> Ap
             action="update",
             payload=patch,
         )
-        return ApiResponse(success=True, message="Draft created", data={"draft": draft})
+        return _draft_response(draft)
 
-    try:
-        updated = store.update_schedule(schedule_id=schedule_id, owner_key=owner_key, patch=patch)
-    except SchedulerValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    if updated is None:
-        raise HTTPException(status_code=404, detail="Schedule not found")
-
-    await _wake_scheduler()
-    return ApiResponse(success=True, message="Schedule updated", data={"schedule": updated})
+    result = _execute_schedule_action(
+        store=store,
+        draft=_build_existing_schedule_action(owner_key=owner_key, schedule_id=schedule_id, action="update", payload=patch),
+    )
+    if bool(result.get("wake")):
+        await _wake_scheduler()
+    return ApiResponse(success=True, message="Schedule updated", data={"confirmed": True, **_result_data(result)})
 
 
 @router.delete("/{schedule_id}", response_model=ApiResponse)
@@ -222,12 +287,13 @@ async def delete_schedule(schedule_id: str, owner_key: OwnerKey = Query(...), co
             action="remove",
             payload={},
         )
-        return ApiResponse(success=True, message="Draft created", data={"draft": draft})
+        return _draft_response(draft)
 
-    deleted = store.delete_schedule(schedule_id=schedule_id, owner_key=owner_key)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Schedule not found")
-    return ApiResponse(success=True, message="Schedule deleted", data={"schedule_id": schedule_id})
+    result = _execute_schedule_action(
+        store=store,
+        draft=_build_existing_schedule_action(owner_key=owner_key, schedule_id=schedule_id, action="remove", payload={}),
+    )
+    return ApiResponse(success=True, message="Schedule deleted", data={"confirmed": True, **_result_data(result)})
 
 
 @router.post("/{schedule_id}/trigger", response_model=ApiResponse)
@@ -243,14 +309,15 @@ async def trigger_schedule(schedule_id: str, request: ScheduleActionRequest) -> 
             action="run",
             payload={},
         )
-        return ApiResponse(success=True, message="Draft created", data={"draft": draft})
+        return _draft_response(draft)
 
-    schedule = store.trigger_schedule(schedule_id=schedule_id, owner_key=owner_key)
-    if schedule is None:
-        raise HTTPException(status_code=404, detail="Schedule not found")
-
-    await _wake_scheduler()
-    return ApiResponse(success=True, message="Schedule queued", data={"schedule": schedule})
+    result = _execute_schedule_action(
+        store=store,
+        draft=_build_existing_schedule_action(owner_key=owner_key, schedule_id=schedule_id, action="run", payload={}),
+    )
+    if bool(result.get("wake")):
+        await _wake_scheduler()
+    return ApiResponse(success=True, message="Schedule queued", data={"confirmed": True, **_result_data(result)})
 
 
 @router.post("/{schedule_id}/pause", response_model=ApiResponse)
@@ -272,7 +339,7 @@ async def list_schedule_runs(schedule_id: str, owner_key: OwnerKey = Query(...),
     schedule = store.get_schedule(schedule_id=schedule_id, owner_key=owner_key)
     if schedule is None:
         raise HTTPException(status_code=404, detail="Schedule not found")
-    runs = store.list_runs(schedule_id=schedule_id, owner_key=None, limit=limit)
+    runs = store.list_runs(schedule_id=schedule_id, owner_key=owner_key, limit=limit)
     return ApiResponse(success=True, message="ok", data={"runs": runs, "count": len(runs)})
 
 
@@ -280,27 +347,12 @@ async def list_schedule_runs(schedule_id: str, owner_key: OwnerKey = Query(...),
 async def confirm_draft(draft_id: str, request: DraftConfirmRequest) -> ApiResponse:
     store = _store()
     owner_key = request.owner_key
-    draft = store.consume_draft(owner_key=owner_key, draft_id=draft_id)
+    draft = store.get_draft(owner_key=owner_key, draft_id=draft_id)
     if draft is None:
         raise HTTPException(status_code=404, detail="Draft not found or expired")
 
-    try:
-        result = execute_confirmed_draft(
-            store=store,
-            draft=draft,
-            fallback_meta={"assistant_id": "lead_agent"},
-        )
-    except SchedulerValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except SchedulerDraftActionError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-
+    result = _execute_schedule_action(store=store, draft=draft, fallback_meta={"assistant_id": "lead_agent"})
+    store.delete_draft(owner_key=owner_key, draft_id=draft_id)
     if bool(result.get("wake")):
         await _wake_scheduler()
-
-    data: dict[str, Any] = {"action": result["action"]}
-    if "schedule" in result:
-        data["schedule"] = result["schedule"]
-    if "schedule_id" in result:
-        data["schedule_id"] = result["schedule_id"]
-    return ApiResponse(success=True, message="Draft confirmed", data=data)
+    return ApiResponse(success=True, message="Draft confirmed", data={"confirmed": True, **_result_data(result)})

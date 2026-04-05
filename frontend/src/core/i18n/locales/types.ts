@@ -55,14 +55,10 @@ export interface Translations {
     createSkillPrompt: string;
     addAttachments: string;
     mode: string;
-    flashMode: string;
-    flashModeDescription: string;
-    reasoningMode: string;
-    reasoningModeDescription: string;
+    commonMode: string;
+    commonModeDescription: string;
     proMode: string;
     proModeDescription: string;
-    ultraMode: string;
-    ultraModeDescription: string;
     reasoningEffort: string;
     reasoningEffortMinimal: string;
     reasoningEffortMinimalDescription: string;
@@ -73,8 +69,6 @@ export interface Translations {
     reasoningEffortHigh: string;
     reasoningEffortHighDescription: string;
     searchModels: string;
-    surpriseMe: string;
-    surpriseMePrompt: string;
     suggestions: {
       suggestion: string;
       prompt: string;
@@ -171,7 +165,6 @@ export interface Translations {
     title: string;
     description: string;
     sections: {
-      appearance: string;
       memory: string;
       tools: string;
       skills: string;
@@ -211,18 +204,6 @@ export interface Translations {
           view: string;
         };
       };
-    };
-    appearance: {
-      themeTitle: string;
-      themeDescription: string;
-      system: string;
-      light: string;
-      dark: string;
-      systemDescription: string;
-      lightDescription: string;
-      darkDescription: string;
-      languageTitle: string;
-      languageDescription: string;
     };
     tools: {
       title: string;

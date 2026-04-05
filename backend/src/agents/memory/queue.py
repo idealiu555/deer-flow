@@ -3,19 +3,12 @@
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from dataclasses import dataclass
 from typing import Any
 
 from src.config.memory_config import get_memory_config
 
 logger = logging.getLogger(__name__)
-
-CN_TIMEZONE = timezone(timedelta(hours=8))
-
-
-def _now_cn() -> datetime:
-    return datetime.now(CN_TIMEZONE)
 
 
 @dataclass
@@ -24,7 +17,6 @@ class ConversationContext:
 
     thread_id: str
     messages: list[Any]
-    timestamp: datetime = field(default_factory=_now_cn)
 
 
 class MemoryUpdateQueue:
@@ -57,7 +49,7 @@ class MemoryUpdateQueue:
 
         context = ConversationContext(
             thread_id=thread_id,
-            messages=messages,
+            messages=list(messages),
         )
 
         with self._lock:

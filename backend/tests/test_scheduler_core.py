@@ -167,12 +167,13 @@ def test_draft_lifecycle(tmp_path: Path) -> None:
     )
     assert draft["id"]
 
-    consumed = store.consume_draft(owner_key="web:test", draft_id=draft["id"])
-    assert consumed is not None
-    assert consumed["id"] == draft["id"]
+    loaded = store.get_draft(owner_key="web:test", draft_id=draft["id"])
+    assert loaded is not None
+    assert loaded["id"] == draft["id"]
 
-    missing = store.consume_draft(owner_key="web:test", draft_id=draft["id"])
-    assert missing is None
+    deleted = store.delete_draft(owner_key="web:test", draft_id=draft["id"])
+    assert deleted is True
+    assert store.get_draft(owner_key="web:test", draft_id=draft["id"]) is None
 
 
 def test_resume_once_without_future_run_is_rejected(tmp_path: Path) -> None:

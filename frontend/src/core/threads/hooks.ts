@@ -383,9 +383,9 @@ export function useThreadStream({
             context: {
               ...extraContext,
               ...context,
-              thinking_enabled: context.mode !== "flash",
-              is_plan_mode: context.mode === "pro" || context.mode === "ultra",
-              subagent_enabled: context.mode === "ultra",
+              thinking_enabled: true,
+              is_plan_mode: true,
+              subagent_enabled: context.mode === "pro",
               thread_id: threadId,
             },
           },

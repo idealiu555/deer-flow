@@ -342,14 +342,28 @@ CREATE INDEX IF NOT EXISTS idx_schedule_drafts_owner ON schedule_drafts(owner_ke
                 return None
         return self._draft_from_row(row)
 
-    def consume_draft(self, *, owner_key: str, draft_id: str) -> dict[str, Any] | None:
+    def list_drafts(self, *, owner_key: str, limit: int = 20) -> list[dict[str, Any]]:
         with self._lock, self._connect() as conn:
             self._purge_expired_drafts(conn)
-            row = conn.execute("SELECT * FROM schedule_drafts WHERE id = ? AND owner_key = ?", (draft_id, owner_key)).fetchone()
-            if row is None:
-                return None
-            conn.execute("DELETE FROM schedule_drafts WHERE id = ?", (draft_id,))
-        return self._draft_from_row(row)
+            rows = conn.execute(
+                """
+                SELECT * FROM schedule_drafts
+                WHERE owner_key = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (owner_key, max(1, min(limit, 200))),
+            ).fetchall()
+        return [self._draft_from_row(row) for row in rows]
+
+    def delete_draft(self, *, owner_key: str, draft_id: str) -> bool:
+        with self._lock, self._connect() as conn:
+            self._purge_expired_drafts(conn)
+            deleted = conn.execute(
+                "DELETE FROM schedule_drafts WHERE id = ? AND owner_key = ?",
+                (draft_id, owner_key),
+            )
+            return deleted.rowcount > 0
 
     def create_schedule(
         self,

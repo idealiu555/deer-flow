@@ -18,7 +18,12 @@ from src.scheduler import (
     start_scheduler_service,
     wake_running_scheduler_service_best_effort,
 )
-from src.scheduler.draft_actions import SchedulerDraftActionError, execute_confirmed_draft
+from src.scheduler.draft_actions import (
+    SchedulerDraftActionError,
+    execute_confirmed_draft,
+    normalize_add_schedule_payload,
+    normalize_schedule_patch_payload,
+)
 
 Action = Literal["status", "list", "add", "update", "remove", "run", "runs", "wake", "confirm"]
 logger = logging.getLogger(__name__)
@@ -146,17 +151,24 @@ def _origin_user_meta(state: Mapping[str, Any] | None) -> dict[str, Any]:
     return meta
 
 
-def _is_follow_up_user_confirmation(state: Mapping[str, Any] | None, draft: Mapping[str, Any]) -> bool:
+def _draft_meta(draft: Mapping[str, Any]) -> Mapping[str, Any]:
     payload = draft.get("payload")
-    meta: Mapping[str, Any] = {}
     if isinstance(payload, Mapping):
         add_meta = payload.get("meta")
         mutation_meta = payload.get("_meta")
         if isinstance(add_meta, Mapping):
-            meta = add_meta
-        elif isinstance(mutation_meta, Mapping):
-            meta = mutation_meta
+            return add_meta
+        if isinstance(mutation_meta, Mapping):
+            return mutation_meta
+    return {}
 
+
+def _draft_thread_id(draft: Mapping[str, Any]) -> str:
+    return str(_draft_meta(draft).get("thread_id") or "").strip()
+
+
+def _is_follow_up_user_confirmation(state: Mapping[str, Any] | None, draft: Mapping[str, Any]) -> bool:
+    meta = _draft_meta(draft)
     origin_message_id = str(meta.get("origin_user_message_id") or "").strip()
 
     origin_message_count = 0
@@ -181,11 +193,67 @@ def _is_follow_up_user_confirmation(state: Mapping[str, Any] | None, draft: Mapp
     return True
 
 
+def _resolve_confirm_draft_id(store: Any, *, owner_key: str, runtime_context: Mapping[str, Any], state: Mapping[str, Any] | None) -> tuple[str | None, str | None]:
+    list_drafts = getattr(store, "list_drafts", None)
+    if not callable(list_drafts):
+        return None, "draft_id is required"
+
+    runtime_thread_id = str(runtime_context.get("thread_id") or "").strip()
+    eligible: list[Mapping[str, Any]] = []
+    for draft in list_drafts(owner_key=owner_key, limit=20):
+        if runtime_thread_id and _draft_thread_id(draft) not in {"", runtime_thread_id}:
+            continue
+        if not _is_follow_up_user_confirmation(state, draft):
+            continue
+        eligible.append(draft)
+
+    if len(eligible) == 1:
+        return str(eligible[0].get("id") or "").strip() or None, None
+    if len(eligible) > 1:
+        return None, "Multiple pending drafts match this confirmation; draft_id is required"
+    return None, "draft_id is required"
+
+
 def _resolve_owner_key(owner: Mapping[str, Any], query: Mapping[str, Any] | None) -> str:
     override = str((query or {}).get("owner_key") or "").strip()
     if override:
         return override
     return str(owner.get("owner_key") or "").strip() or "web:settings"
+
+
+def _draft_response(*, action: Action, draft: Mapping[str, Any], message: str) -> str:
+    return _json(
+        {
+            "success": True,
+            "action": action,
+            "confirmed": False,
+            "requires_confirmation": True,
+            "message": message,
+            "draft_id": draft["id"],
+            "draft": dict(draft),
+        }
+    )
+
+
+def _confirm_response(*, action: Action, result: Mapping[str, Any]) -> str:
+    response: dict[str, Any] = {
+        "success": True,
+        "action": action,
+        "confirmed": True,
+        "confirmed_action": result["action"],
+    }
+    if "schedule" in result:
+        response["schedule"] = result["schedule"]
+    if "schedule_id" in result:
+        response["schedule_id"] = result["schedule_id"]
+    return _json(response)
+
+
+def _schedule_exists(store: Any, *, schedule_id: str, owner_key: str) -> bool:
+    get_schedule = getattr(store, "get_schedule", None)
+    if not callable(get_schedule):
+        return True
+    return get_schedule(schedule_id=schedule_id, owner_key=owner_key) is not None
 
 
 async def _wake_scheduler_loop() -> bool:
@@ -240,6 +308,7 @@ async def schedule_tool(
     owner = resolve_owner_from_context(runtime.context)
     owner_key = _resolve_owner_key(owner, query)
     state = getattr(runtime, "state", None)
+    _ = confirmed  # Backward compatibility for older tool invocations; mutating actions remain draft-first.
 
     # Capture a deterministic execution snapshot for consistency.
     metadata = dict((runtime.config or {}).get("metadata", {}))
@@ -264,6 +333,8 @@ async def schedule_tool(
         if action == "runs":
             if not schedule_id:
                 return _json({"success": False, "action": action, "error": "schedule_id is required"})
+            if not _schedule_exists(store, schedule_id=schedule_id, owner_key=owner_key):
+                return _json({"success": False, "action": action, "error": "Schedule not found"})
             limit = _parse_query_int((query or {}).get("limit"), field="limit", default=20)
             runs = store.list_runs(schedule_id=schedule_id, owner_key=owner_key, limit=limit)
             return _json({"success": True, "action": action, "runs": runs, "count": len(runs)})
@@ -275,7 +346,14 @@ async def schedule_tool(
 
         if action == "confirm":
             if not draft_id:
-                return _json({"success": False, "action": action, "error": "draft_id is required"})
+                draft_id, resolution_error = _resolve_confirm_draft_id(
+                    store,
+                    owner_key=owner_key,
+                    runtime_context=runtime.context,
+                    state=state,
+                )
+                if not draft_id:
+                    return _json({"success": False, "action": action, "error": resolution_error or "draft_id is required"})
             draft = store.get_draft(owner_key=owner_key, draft_id=draft_id)
             if draft is None:
                 return _json({"success": False, "action": action, "error": "Draft not found or expired"})
@@ -287,13 +365,10 @@ async def schedule_tool(
                         "error": "A follow-up user message with confirmation intent is required before confirming this draft",
                     }
                 )
-            consumed_draft = store.consume_draft(owner_key=owner_key, draft_id=draft_id)
-            if consumed_draft is None:
-                return _json({"success": False, "action": action, "error": "Draft not found or expired"})
             try:
                 result = execute_confirmed_draft(
                     store=store,
-                    draft=consumed_draft,
+                    draft=draft,
                     fallback_meta={
                         "channel_name": owner.get("channel_name"),
                         "chat_id": owner.get("chat_id"),
@@ -304,22 +379,15 @@ async def schedule_tool(
                         "context": run_context,
                     },
                 )
-            except SchedulerDraftActionError as exc:
-                return _json({"success": False, "action": action, "error": str(exc)})
+            except (SchedulerDraftActionError, SchedulerValidationError) as exc:
+                return _json({"success": False, "action": action, "draft_id": draft_id, "error": str(exc)})
+            store.delete_draft(owner_key=owner_key, draft_id=draft_id)
             if bool(result.get("wake")):
                 await _wake_scheduler_loop()
-            response: dict[str, Any] = {
-                "success": True,
-                "action": action,
-                "confirmed_action": result["action"],
-            }
-            if "schedule" in result:
-                response["schedule"] = result["schedule"]
-            if "schedule_id" in result:
-                response["schedule_id"] = result["schedule_id"]
-            return _json(response)
+            return _confirm_response(action=action, result=result)
 
         if action == "add":
+            prepared_schedule = normalize_add_schedule_payload(store, schedule or {})
             draft_meta: dict[str, Any] = {
                 "channel_name": owner.get("channel_name"),
                 "chat_id": owner.get("chat_id"),
@@ -334,17 +402,14 @@ async def schedule_tool(
                 owner_key=owner_key,
                 action="add",
                 payload={
-                    "schedule": dict(schedule or {}),
+                    "schedule": prepared_schedule,
                     "meta": draft_meta,
                 },
             )
-            return _json(
-                {
-                    "success": True,
-                    "action": action,
-                    "message": "Draft created. Schedule creation requires confirmation via schedule(action='confirm', draft_id=...).",
-                    "draft": draft,
-                }
+            return _draft_response(
+                action=action,
+                draft=draft,
+                message="Draft created. The schedule is not active yet. Confirm it with schedule(action='confirm', draft_id=...).",
             )
 
         if action in {"update", "remove", "run"} and not schedule_id:
@@ -352,18 +417,18 @@ async def schedule_tool(
 
         # Mutating actions in tool mode are always draft-first for safety and consistency.
         if action in {"update", "remove", "run"}:
-            draft_payload = dict(schedule or {})
+            if not _schedule_exists(store, schedule_id=schedule_id, owner_key=owner_key):
+                return _json({"success": False, "action": action, "error": "Schedule not found"})
+
+            draft_payload = normalize_schedule_patch_payload(schedule or {}) if action == "update" else dict(schedule or {})
             draft_meta = _origin_user_meta(state)
             if draft_meta:
                 draft_payload["_meta"] = draft_meta
             draft = store.create_draft(owner_key=owner_key, action=action, schedule_id=schedule_id, payload=draft_payload)
-            return _json(
-                {
-                    "success": True,
-                    "action": action,
-                    "message": "Draft created. Please ask user to confirm, then call schedule(action='confirm', draft_id=...).",
-                    "draft": draft,
-                }
+            return _draft_response(
+                action=action,
+                draft=draft,
+                message="Draft created. Please ask user to confirm, then call schedule(action='confirm', draft_id=...).",
             )
 
         return _json({"success": False, "action": action, "error": f"Unsupported action: {action}"})

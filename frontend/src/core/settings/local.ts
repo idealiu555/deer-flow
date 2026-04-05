@@ -1,5 +1,7 @@
 import type { AgentThreadContext } from "../threads";
 
+export type InputMode = "common" | "pro";
+
 export const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
   notification: {
     enabled: true,
@@ -24,12 +26,27 @@ export interface LocalSettings {
     AgentThreadContext,
     "thread_id" | "is_plan_mode" | "thinking_enabled" | "subagent_enabled"
   > & {
-    mode: "flash" | "thinking" | "pro" | "ultra" | undefined;
+    mode: InputMode | undefined;
     reasoning_effort?: "minimal" | "low" | "medium" | "high";
   };
   layout: {
     sidebar_collapsed: boolean;
   };
+}
+
+function normalizeMode(mode: unknown): InputMode | undefined {
+  switch (mode) {
+    case "common":
+    case "pro":
+      return mode;
+    case "ultra":
+      return "pro";
+    case "flash":
+    case "thinking":
+      return "common";
+    default:
+      return undefined;
+  }
 }
 
 export function getLocalSettings(): LocalSettings {
@@ -45,6 +62,7 @@ export function getLocalSettings(): LocalSettings {
         context: {
           ...DEFAULT_LOCAL_SETTINGS.context,
           ...settings.context,
+          mode: normalizeMode(settings?.context?.mode),
         },
         layout: {
           ...DEFAULT_LOCAL_SETTINGS.layout,

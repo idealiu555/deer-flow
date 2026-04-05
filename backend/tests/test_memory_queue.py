@@ -62,3 +62,17 @@ def test_process_due_only_drains_ready_threads(monkeypatch):
     assert processed == ["thread-a"]
     assert queue.pending_count == 1
     assert "thread-b" in queue._pending
+
+
+def test_add_copies_message_list(monkeypatch):
+    from src.agents.memory import queue as queue_module
+
+    queue = MemoryUpdateQueue()
+    monkeypatch.setattr(queue_module, "get_memory_config", lambda: SimpleNamespace(enabled=True, debounce_seconds=1))
+    monkeypatch.setattr(queue_module.threading, "Timer", _DummyTimer)
+
+    messages = ["a-1"]
+    queue.add("thread-a", messages)
+    messages.append("a-2")
+
+    assert queue._pending["thread-a"].messages == ["a-1"]

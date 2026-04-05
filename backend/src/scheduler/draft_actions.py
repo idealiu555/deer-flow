@@ -29,6 +29,42 @@ def _pick_dict_meta(meta: Mapping[str, Any], fallback: Mapping[str, Any], key: s
     return {}
 
 
+def _normalize_schedule_kind(value: Any) -> str:
+    kind = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if kind in {"once", "one_time", "oneoff", "one_off", "single"}:
+        return "once"
+    if kind in {"cron", "recurring", "repeat", "repeating"}:
+        return "cron"
+    return kind
+
+
+def normalize_add_schedule_payload(store: SchedulerStore, payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate and canonicalize add-schedule payloads before persisting/executing."""
+    draft_schedule = dict(payload)
+    draft_schedule["kind"] = _normalize_schedule_kind(draft_schedule.get("kind"))
+    normalized = store.normalize_schedule_payload(draft_schedule)
+
+    canonical: dict[str, Any] = {
+        "title": normalized["title"],
+        "prompt": normalized["prompt"],
+        "kind": normalized["kind"],
+        "timezone": normalized["timezone"],
+    }
+    if normalized["kind"] == "cron":
+        canonical["cron"] = normalized["cron_expr"]
+    else:
+        canonical["at"] = str(draft_schedule.get("at") or "").strip() or str(normalized["run_at_utc"] or "")
+    return canonical
+
+
+def normalize_schedule_patch_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Canonicalize mutable schedule patch fields before persistence/execution."""
+    normalized = dict(payload)
+    if "kind" in normalized:
+        normalized["kind"] = _normalize_schedule_kind(normalized.get("kind"))
+    return normalized
+
+
 def execute_confirmed_draft(
     *,
     store: SchedulerStore,
@@ -60,7 +96,7 @@ def execute_confirmed_draft(
             topic_id=_pick_meta(meta, fallback, "topic_id"),
             thread_id=_pick_meta(meta, fallback, "thread_id"),
             assistant_id=str(_pick_meta(meta, fallback, "assistant_id") or "lead_agent"),
-            payload=dict(schedule_payload),
+            payload=normalize_add_schedule_payload(store, schedule_payload),
             config=_pick_dict_meta(meta, fallback, "config"),
             context=_pick_dict_meta(meta, fallback, "context"),
         )
@@ -69,7 +105,7 @@ def execute_confirmed_draft(
     if action == "update":
         if not schedule_id:
             raise SchedulerDraftActionError("Invalid update draft payload")
-        patch_payload = {key: value for key, value in dict(payload).items() if key != "_meta"}
+        patch_payload = normalize_schedule_patch_payload({key: value for key, value in dict(payload).items() if key != "_meta"})
         updated = store.update_schedule(schedule_id=schedule_id, owner_key=owner_key, patch=patch_payload)
         if updated is None:
             raise SchedulerDraftActionError("Schedule not found", status_code=404)
