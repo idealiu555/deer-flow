@@ -114,7 +114,6 @@ backend/src/
 │
 ├── community/               # Community tools
 │   ├── tavily/             # Tavily web search
-│   ├── jina/               # Jina web fetch
 │   ├── firecrawl/          # Firecrawl scraping
 │
 ├── reflection/              # Dynamic loading

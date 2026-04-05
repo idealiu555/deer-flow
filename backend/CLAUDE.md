@@ -44,7 +44,7 @@ deer-flow/
 │   │   ├── models/            # Model factory with thinking/vision support
 │   │   ├── skills/            # Skills discovery, loading, parsing
 │   │   ├── config/            # Configuration system (app, model, sandbox, tool, etc.)
-│   │   ├── community/         # Community tools (tavily, jina_ai, firecrawl, image_search)
+│   │   ├── community/         # Community tools (tavily, image_search)
 │   │   ├── reflection/        # Dynamic module loading (resolve_variable, resolve_class)
 │   │   ├── utils/             # Utilities (network, readability)
 │   │   └── client.py          # Embedded Python client (DeerFlowClient)
@@ -206,8 +206,6 @@ Proxied through nginx: `/api/langgraph/*` → LangGraph, all other `/api/*` → 
 
 **Community tools** (`src/community/`):
 - `tavily/` - Web search (5 results default) and web fetch (4KB limit)
-- `jina_ai/` - Web fetch via Jina reader API with readability extraction
-- `firecrawl/` - Web scraping via Firecrawl API
 - `image_search/` - Image search via DuckDuckGo
 
 ### MCP System (`src/mcp/`)
